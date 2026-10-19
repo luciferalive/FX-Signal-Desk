@@ -1,0 +1,43 @@
+//@version=5
+indicator("ICT Sessions + Liquidity Sweeps (fxbot companion)", overlay=true, max_labels_count=300)
+
+// Free TradingView accounts can run this. Times are New York local (DST handled).
+tz    = input.string("America/New_York", "Session timezone")
+asiaS = input.session("1900-0000", "Asia range")
+lonS  = input.session("0200-0500", "London killzone")
+nyS   = input.session("0700-1000", "NY AM killzone")
+pmS   = input.session("1330-1600", "NY PM killzone")
+
+inSess(s) => not na(time(timeframe.period, s, tz))
+inAsia = inSess(asiaS)
+inLon  = inSess(lonS)
+inNY   = inSess(nyS)
+inPM   = inSess(pmS)
+
+bgcolor(inAsia ? color.new(color.blue, 92) : inLon ? color.new(color.orange, 85) : inNY ? color.new(color.green, 85) : inPM ? color.new(color.purple, 90) : na)
+
+// Asian range high / low (shown once the range is complete)
+var float aH = na
+var float aL = na
+if inAsia and not inAsia[1]
+    aH := high
+    aL := low
+else if inAsia
+    aH := math.max(aH, high)
+    aL := math.min(aL, low)
+plot(inAsia ? na : aH, "Asia High", color.new(color.blue, 20), style=plot.style_linebr)
+plot(inAsia ? na : aL, "Asia Low",  color.new(color.blue, 20), style=plot.style_linebr)
+
+// Previous day high / low
+[pdh, pdl] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead=barmerge.lookahead_on)
+plot(pdh, "PDH", color.new(color.red, 30),  style=plot.style_linebr)
+plot(pdl, "PDL", color.new(color.lime, 30), style=plot.style_linebr)
+
+// Liquidity sweeps: wick beyond the level, close back inside
+bearSweep = (not inAsia and not na(aH) and high > aH and close < aH) or (not na(pdh) and high > pdh and close < pdh)
+bullSweep = (not inAsia and not na(aL) and low < aL and close > aL) or (not na(pdl) and low < pdl and close > pdl)
+plotshape(bearSweep, "Bearish sweep", shape.triangledown, location.abovebar, color.red,  size=size.tiny)
+plotshape(bullSweep, "Bullish sweep", shape.triangleup,   location.belowbar, color.lime, size=size.tiny)
+
+alertcondition(bearSweep, "Bearish liquidity sweep", "Bearish sweep {{ticker}} {{interval}}")
+alertcondition(bullSweep, "Bullish liquidity sweep", "Bullish sweep {{ticker}} {{interval}}")

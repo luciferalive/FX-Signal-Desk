@@ -1,0 +1,10 @@
+# One pair per line. Add or remove pairs here, then save (commit) the file.
+# Examples that work: EURUSD GBPUSD USDJPY GBPJPY EURJPY AUDUSD NZDUSD USDCAD USDCHF EURGBP XAUUSD
+# (XAUUSD uses gold futures prices, which differ slightly from spot gold.)
+EURUSD
+GBPUSD
+USDJPY
+GBPJPY
+AUDUSD
+USDCAD
+XAUUSD
