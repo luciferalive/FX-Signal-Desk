@@ -90,10 +90,10 @@ def main():
     va.add_argument("--spread", type=float, default=1.0)
     va.add_argument("--min-ratio", type=float, default=0.6, help="share of confirmations required (0.6 = 60%%)")
 
-    db = sub.add_parser("dashboard", help="build the web dashboard (docs/index.html)")
+    db = sub.add_parser("dashboard", help="build the web dashboard into the docs folder")
     db.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
-    db.add_argument("--out", default="docs/index.html")
-    db.add_argument("--demo", action="store_true", help="synthetic data, labelled as demo")
+    db.add_argument("--out", default="docs", help="output folder (index.html + data/*.json)")
+    db.add_argument("--demo", action="store_true", help="made-up prices, labelled as demo, no internet needed")
 
     sub.add_parser("telegram-test", help="send a test message to your Telegram")
     wh = sub.add_parser("webhook")
@@ -130,14 +130,14 @@ def main():
         res, _ = replay(df, a.symbol, a.mode, a.step, a.spread, a.min_ratio)
         print(report(res, a.symbol, a.mode))
     elif a.cmd == "dashboard":
-        from .dashboard import build
-        loader = None
+        from .dashboard import build, demo_frames
+        from .news import sample_news
+        out = os.path.dirname(a.out) or "." if a.out.endswith(".html") else a.out
         if a.demo:
-            def loader(sym, iv):
-                base = synthetic("15m", days=900, seed=sum(map(ord, sym)))
-                return base if iv == "15m" else resample(base, iv)
-        build(a.symbols, a.out, loader=loader, demo=a.demo)
-        print(f"dashboard -> {a.out}")
+            path = build(a.symbols, out, frames=demo_frames(a.symbols), news=sample_news(), demo=True, inline=True)
+        else:
+            path = build(a.symbols, out)
+        print(f"dashboard -> {path}")
     elif a.cmd == "telegram-test":
         from .notify import telegram_test
         raise SystemExit(0 if telegram_test() else 1)

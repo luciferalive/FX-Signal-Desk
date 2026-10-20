@@ -1,0 +1,458 @@
+//@version=5
+// FX Signal Desk - live signals inside TradingView (works on any forex pair, gold and any timeframe 1m to 1M).
+// How to use: open a chart > press "Pine Editor" at the bottom > delete everything > paste this whole file >
+// press "Add to chart". Then right-click the indicator > "Add alert" if you want phone notifications.
+// Shows: killzones (New York time), previous day / week highs and lows, Asia range, today high / low, daily /
+// midnight / weekly opens, SMA 50 / 100 / 200, fair value gaps, liquidity sweeps and trade signals with entry,
+// stop loss, TP1, TP2 and a confirmation score. News is not available inside Pine: use TradingView's own
+// Economic Calendar (red = high impact) or the FX Signal Desk dashboard.
+indicator("FX Signal Desk", shorttitle="FX Desk", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500, max_bars_back=500)
+
+// ------------------------------------------------------------------ inputs
+G1 = "1. Signals"
+G2 = "2. Levels"
+G3 = "3. Averages"
+G4 = "4. Fair value gaps"
+G5 = "5. Sessions (New York time)"
+
+showSig  = input.bool(true, "Show trade signals", group=G1)
+stratSel = input.string("Both", "Strategy", options=["Both", "ICT sweep + FVG", "Trend pullback"], group=G1)
+minScore = input.int(5, "Minimum confirmations (out of 9)", minval=1, maxval=9, group=G1)
+rrInp    = input.float(2.0, "Reward to risk for TP2", minval=1.0, step=0.5, group=G1)
+dispAtr  = input.float(0.9, "ICT displacement candle size (x ATR)", minval=0.3, step=0.1, group=G1)
+sigBars  = input.int(25, "Trade box width (bars)", minval=5, maxval=200, group=G1)
+htfInp   = input.string("Auto", "Higher timeframe for trend", options=["Auto", "15", "60", "240", "D", "W", "M"], group=G1)
+
+showPD    = input.bool(true, "Previous day high / low", group=G2)
+showPW    = input.bool(true, "Previous week high / low", group=G2)
+showAsia  = input.bool(true, "Asia range high / low", group=G2)
+showToday = input.bool(true, "Today high / low", group=G2)
+showOpens = input.bool(true, "Daily, midnight and weekly open", group=G2)
+showLbl   = input.bool(true, "Level names on the right", group=G2)
+showSweep = input.bool(true, "Mark liquidity sweeps", group=G2)
+
+showMA = input.bool(true, "Show SMA 50 / 100 / 200", group=G3)
+
+showFvg  = input.bool(true, "Show fair value gaps", group=G4)
+maxFvg   = input.int(8, "Max gaps on chart", minval=1, maxval=30, group=G4)
+fvgMinAt = input.float(0.15, "Smallest gap (x ATR)", minval=0.0, step=0.05, group=G4)
+
+showSess = input.bool(true, "Shade killzones (intraday charts)", group=G5)
+tzInp    = input.string("America/New_York", "Timezone for sessions", group=G5)
+asiaS    = input.session("1900-0000", "Asia", group=G5)
+lonS     = input.session("0200-0500", "London killzone", group=G5)
+nyAmS    = input.session("0700-1000", "New York AM killzone", group=G5)
+nyPmS    = input.session("1330-1600", "New York PM killzone", group=G5)
+
+// ------------------------------------------------------------------ indicators (always calculated)
+atr14 = ta.atr(14)
+ema21 = ta.ema(close, 21)
+ema50 = ta.ema(close, 50)
+ema200 = ta.ema(close, 200)
+sma50 = ta.sma(close, 50)
+sma100 = ta.sma(close, 100)
+sma200 = ta.sma(close, 200)
+low4 = ta.lowest(low, 4)
+low5 = ta.lowest(low, 5)
+high4 = ta.highest(high, 4)
+high5 = ta.highest(high, 5)
+pivH = ta.pivothigh(high, 3, 3)
+pivL = ta.pivotlow(low, 3, 3)
+
+// ------------------------------------------------------------------ state
+var float dayH = na
+var float dayL = na
+var float dayO = na
+var float pdH = na
+var float pdL = na
+var float weekH = na
+var float weekL = na
+var float weekO = na
+var float pwH = na
+var float pwL = na
+var float midO = na
+var float asiaRunH = na
+var float asiaRunL = na
+var float asiaH = na
+var float asiaL = na
+var float ph1 = na
+var float ph2 = na
+var float pl1 = na
+var float pl2 = na
+var int lastBullSweep = -1000
+var int lastBearSweep = -1000
+var int lastSigBar = -1000
+var int pendSide = 0
+var int pendBar = 0
+var float pendExt = na
+var float pendMss = na
+var array<box> fvgBox = array.new<box>()
+var array<int> fvgSide = array.new<int>()
+var array<label> lvlLbls = array.new<label>()
+
+// ------------------------------------------------------------------ sessions
+tAsia = time(timeframe.period, asiaS, tzInp)
+tLon = time(timeframe.period, lonS, tzInp)
+tNyAm = time(timeframe.period, nyAmS, tzInp)
+tNyPm = time(timeframe.period, nyPmS, tzInp)
+inAsia = timeframe.isintraday and not na(tAsia)
+inLon = timeframe.isintraday and not na(tLon)
+inNyAm = timeframe.isintraday and not na(tNyAm)
+inNyPm = timeframe.isintraday and not na(tNyPm)
+inKZ = inLon or inNyAm
+needKZ = timeframe.isintraday and timeframe.in_seconds() < 14400
+nyDom = dayofmonth(time, tzInp)
+
+bgcolor(showSess and inAsia ? color.new(color.blue, 92) : na, title="Asia")
+bgcolor(showSess and inLon ? color.new(color.orange, 86) : na, title="London killzone")
+bgcolor(showSess and inNyAm ? color.new(color.green, 86) : na, title="New York AM killzone")
+bgcolor(showSess and inNyPm ? color.new(color.purple, 90) : na, title="New York PM killzone")
+
+// ------------------------------------------------------------------ day / week levels (no repainting)
+newDay = timeframe.change("D")
+newWeek = timeframe.change("W")
+
+if newDay or na(dayH)
+    pdH := dayH
+    pdL := dayL
+    dayO := open
+    dayH := high
+    dayL := low
+else
+    dayH := math.max(dayH, high)
+    dayL := math.min(dayL, low)
+
+if newWeek or na(weekH)
+    pwH := weekH
+    pwL := weekL
+    weekO := open
+    weekH := high
+    weekL := low
+else
+    weekH := math.max(weekH, high)
+    weekL := math.min(weekL, low)
+
+if timeframe.isintraday and nyDom != nyDom[1]
+    midO := open
+
+if inAsia and not inAsia[1]
+    asiaRunH := high
+    asiaRunL := low
+else if inAsia
+    asiaRunH := math.max(asiaRunH, high)
+    asiaRunL := math.min(asiaRunL, low)
+if (not inAsia) and inAsia[1]
+    asiaH := asiaRunH
+    asiaL := asiaRunL
+
+// ------------------------------------------------------------------ swing points
+if not na(pivH)
+    ph2 := ph1
+    ph1 := pivH
+if not na(pivL)
+    pl2 := pl1
+    pl1 := pivL
+
+// ------------------------------------------------------------------ trend
+f_trend() =>
+    float e21 = ta.ema(close, 21)
+    float e50 = ta.ema(close, 50)
+    float e200 = ta.ema(close, 200)
+    int s = (close > e50 ? 1 : -1) + (e21 > e50 ? 1 : -1) + (e50 > e200 ? 1 : -1)
+    s
+
+f_autoHtf() =>
+    int secs = timeframe.in_seconds(timeframe.period)
+    secs <= 60 ? "15" : secs <= 900 ? "60" : secs <= 3600 ? "240" : secs < 86400 ? "D" : secs < 604800 ? "W" : "M"
+
+htfTf = htfInp == "Auto" ? f_autoHtf() : htfInp
+htfScore = request.security(syminfo.tickerid, htfTf, f_trend(), lookahead=barmerge.lookahead_off)
+tScore = f_trend()
+hhhl = not na(ph1) and not na(ph2) and not na(pl1) and not na(pl2) and ph1 > ph2 and pl1 > pl2
+lhll = not na(ph1) and not na(ph2) and not na(pl1) and not na(pl2) and ph1 < ph2 and pl1 < pl2
+trendUp = tScore == 3 or (tScore >= 1 and hhhl)
+trendDn = tScore == -3 or (tScore <= -1 and lhll)
+htfUp = htfScore >= 2
+htfDn = htfScore <= -2
+
+// ------------------------------------------------------------------ fair value gaps
+ai = atr14[1]
+bullFvg = low > high[2] and close[1] > open[1] and math.abs(close[1] - open[1]) >= 0.5 * ai and (low - high[2]) >= fvgMinAt * ai
+bearFvg = high < low[2] and close[1] < open[1] and math.abs(close[1] - open[1]) >= 0.5 * ai and (low[2] - high) >= fvgMinAt * ai
+
+if showFvg
+    if bullFvg
+        array.push(fvgBox, box.new(left=bar_index - 2, top=low, right=bar_index, bottom=high[2], border_color=color.new(color.green, 55), bgcolor=color.new(color.green, 84), extend=extend.right))
+        array.push(fvgSide, 1)
+    if bearFvg
+        array.push(fvgBox, box.new(left=bar_index - 2, top=low[2], right=bar_index, bottom=high, border_color=color.new(color.red, 55), bgcolor=color.new(color.red, 84), extend=extend.right))
+        array.push(fvgSide, -1)
+    int nBox = array.size(fvgBox)
+    if nBox > 0
+        for i = nBox - 1 to 0
+            box b = array.get(fvgBox, i)
+            int sd = array.get(fvgSide, i)
+            float bTop = box.get_top(b)
+            float bBot = box.get_bottom(b)
+            bool dead = sd == 1 ? close < bBot : close > bTop
+            if dead
+                box.delete(b)
+                array.remove(fvgBox, i)
+                array.remove(fvgSide, i)
+    while array.size(fvgBox) > maxFvg
+        box.delete(array.get(fvgBox, 0))
+        array.remove(fvgBox, 0)
+        array.remove(fvgSide, 0)
+
+f_inFvg(price, side) =>
+    bool hit = false
+    int n = array.size(fvgBox)
+    if n > 0
+        for i = 0 to n - 1
+            box b = array.get(fvgBox, i)
+            if array.get(fvgSide, i) == side and price <= box.get_top(b) and price >= box.get_bottom(b)
+                hit := true
+    hit
+
+f_near(price, a) =>
+    float d = 0.6 * a
+    bool r = math.abs(price - pdH) <= d or math.abs(price - pdL) <= d or math.abs(price - pwH) <= d or math.abs(price - pwL) <= d
+    r := r or math.abs(price - asiaH) <= d or math.abs(price - asiaL) <= d or math.abs(price - dayO) <= d or math.abs(price - midO) <= d
+    r := r or math.abs(price - ph1) <= d or math.abs(price - pl1) <= d
+    r
+
+// ------------------------------------------------------------------ liquidity sweeps and candle patterns
+asiaDone = not inAsia and not na(asiaH)
+bearSweep = (high > pdH and close < pdH) or (high > pwH and close < pwH) or (asiaDone and high > asiaH and close < asiaH) or (high > ph1 and close < ph1)
+bullSweep = (low < pdL and close > pdL) or (low < pwL and close > pwL) or (asiaDone and low < asiaL and close > asiaL) or (low < pl1 and close > pl1)
+
+if bullSweep
+    lastBullSweep := bar_index
+if bearSweep
+    lastBearSweep := bar_index
+
+rng = high - low
+body = math.abs(close - open)
+bullCandle = (close[1] < open[1] and close > open and close >= open[1] and open <= close[1] and body >= 0.8 * atr14) or (rng >= 0.8 * atr14 and rng > 0 and (math.min(open, close) - low) / rng >= 0.6 and body / rng <= 0.3)
+bearCandle = (close[1] > open[1] and close < open and close <= open[1] and open >= close[1] and body >= 0.8 * atr14) or (rng >= 0.8 * atr14 and rng > 0 and (high - math.max(open, close)) / rng >= 0.6 and body / rng <= 0.3)
+
+plotshape(showSweep and bearSweep, "Bearish sweep", shape.triangledown, location.abovebar, color.new(color.red, 20), size=size.tiny)
+plotshape(showSweep and bullSweep, "Bullish sweep", shape.triangleup, location.belowbar, color.new(color.green, 20), size=size.tiny)
+
+// ------------------------------------------------------------------ signal engines
+int sSide = 0
+float sEntry = na
+float sSl = na
+string sStrat = ""
+string sType = ""
+bool useIct = stratSel == "Both" or stratSel == "ICT sweep + FVG"
+bool useTrend = stratSel == "Both" or stratSel == "Trend pullback"
+bool cool = bar_index - lastSigBar > 8
+bool kzOk = (not needKZ) or inKZ
+
+// 1) ICT: liquidity sweep, then a displacement candle that shifts structure and leaves a fair value gap.
+if pendSide != 0 and bar_index - pendBar > 8
+    pendSide := 0
+
+if useIct and pendSide == 0 and kzOk and cool
+    if bearSweep
+        pendSide := -1
+        pendBar := bar_index
+        pendExt := high
+        pendMss := low4
+    else if bullSweep
+        pendSide := 1
+        pendBar := bar_index
+        pendExt := low
+        pendMss := high4
+
+if pendSide == -1 and bar_index > pendBar
+    pendExt := math.max(pendExt, high)
+    pendMss := math.min(pendMss, low[2])
+    bool dispOk = (open[1] - close[1]) >= dispAtr * ai
+    bool fvgOk = low[2] > high
+    bool mssOk = close[1] < pendMss
+    if dispOk and fvgOk and mssOk
+        float ent = (low[2] + high) / 2
+        float slp = pendExt + 0.15 * atr14
+        float rsk = slp - ent
+        if ent > close and rsk >= 0.3 * atr14 and rsk <= 4 * atr14
+            sSide := -1
+            sEntry := ent
+            sSl := slp
+            sStrat := "ICT sweep + FVG"
+            sType := "limit"
+        pendSide := 0
+else if pendSide == 1 and bar_index > pendBar
+    pendExt := math.min(pendExt, low)
+    pendMss := math.max(pendMss, high[2])
+    bool dispOk = (close[1] - open[1]) >= dispAtr * ai
+    bool fvgOk = high[2] < low
+    bool mssOk = close[1] > pendMss
+    if dispOk and fvgOk and mssOk
+        float ent = (high[2] + low) / 2
+        float slp = pendExt - 0.15 * atr14
+        float rsk = ent - slp
+        if ent < close and rsk >= 0.3 * atr14 and rsk <= 4 * atr14
+            sSide := 1
+            sEntry := ent
+            sSl := slp
+            sStrat := "ICT sweep + FVG"
+            sType := "limit"
+        pendSide := 0
+
+// 2) Trend pullback: trend by EMA 21 / 50 / 200, pullback to EMA 21, then a break of the previous candle.
+bool upT = close > ema200 and ema50 > ema200 and ema50 > ema50[5]
+bool dnT = close < ema200 and ema50 < ema200 and ema50 < ema50[5]
+if useTrend and sSide == 0 and cool
+    if upT and low4 <= ema21 and close > high[1] and close > open
+        float slp = low5 - 0.1 * atr14
+        float rsk = close - slp
+        if rsk < 0.8 * atr14
+            slp := close - 0.8 * atr14
+            rsk := 0.8 * atr14
+        if rsk <= 3.5 * atr14
+            sSide := 1
+            sEntry := close
+            sSl := slp
+            sStrat := "Trend pullback"
+            sType := "market"
+    else if dnT and high4 >= ema21 and close < low[1] and close < open
+        float slp = high5 + 0.1 * atr14
+        float rsk = slp - close
+        if rsk < 0.8 * atr14
+            slp := close + 0.8 * atr14
+            rsk := 0.8 * atr14
+        if rsk <= 3.5 * atr14
+            sSide := -1
+            sEntry := close
+            sSl := slp
+            sStrat := "Trend pullback"
+            sType := "market"
+
+// ------------------------------------------------------------------ confirmations (9 checks, same idea as the dashboard)
+int score = 0
+bool against = false
+string failed = ""
+float sTp1 = na
+float sTp2 = na
+if sSide != 0
+    bool buy = sSide == 1
+    float rsk0 = math.abs(sEntry - sSl)
+    sTp1 := sEntry + sSide * rsk0
+    sTp2 := sEntry + sSide * rrInp * rsk0
+    bool c1 = buy ? trendUp : trendDn
+    bool c2 = buy ? htfUp : htfDn
+    bool c3 = buy ? (close > sma200 and sma50 > sma200) : (close < sma200 and sma50 < sma200)
+    bool c4 = inKZ
+    bool c5 = f_near(sEntry, atr14)
+    bool c6 = f_inFvg(sEntry, sSide)
+    bool c7 = buy ? (bar_index - lastBullSweep <= 10 or bullCandle) : (bar_index - lastBearSweep <= 10 or bearCandle)
+    bool c8 = rrInp >= 2.0
+    bool c9 = not na(ph1) and not na(pl1) and ph1 > pl1 and (buy ? close < (ph1 + pl1) / 2 : close > (ph1 + pl1) / 2)
+    score += c1 ? 1 : 0
+    score += c2 ? 1 : 0
+    score += c3 ? 1 : 0
+    score += c4 ? 1 : 0
+    score += c5 ? 1 : 0
+    score += c6 ? 1 : 0
+    score += c7 ? 1 : 0
+    score += c8 ? 1 : 0
+    score += c9 ? 1 : 0
+    against := buy ? (trendDn or htfDn) : (trendUp or htfUp)
+    failed := (c1 ? "" : "trend, ") + (c2 ? "" : "higher TF, ") + (c3 ? "" : "SMAs, ") + (c4 ? "" : "killzone, ") + (c5 ? "" : "key level, ") + (c6 ? "" : "FVG, ") + (c7 ? "" : "sweep/candle, ") + (c8 ? "" : "RR, ") + (c9 ? "" : "premium/discount, ")
+
+bool sFire = showSig and sSide != 0 and score >= minScore and not against and barstate.isconfirmed
+string grade = score >= 7 ? "A" : score >= 5 ? "B" : "C"
+float pipSz = syminfo.type == "forex" ? syminfo.mintick * 10 : syminfo.mintick
+
+if sFire
+    lastSigBar := bar_index
+    color col = sSide == 1 ? color.green : color.red
+    int x2 = bar_index + sigBars
+    string side = sSide == 1 ? "BUY" : "SELL"
+    string pr = str.tostring(sEntry, format.mintick)
+    box.new(left=bar_index, top=math.max(sEntry, sTp2), right=x2, bottom=math.min(sEntry, sTp2), border_color=color.new(color.green, 60), bgcolor=color.new(color.green, 88))
+    box.new(left=bar_index, top=math.max(sEntry, sSl), right=x2, bottom=math.min(sEntry, sSl), border_color=color.new(color.red, 60), bgcolor=color.new(color.red, 88))
+    line.new(bar_index, sEntry, x2, sEntry, xloc=xloc.bar_index, color=color.new(color.white, 0), width=2)
+    line.new(bar_index, sSl, x2, sSl, xloc=xloc.bar_index, color=color.red, width=2)
+    line.new(bar_index, sTp1, x2, sTp1, xloc=xloc.bar_index, color=color.new(color.green, 30), style=line.style_dashed)
+    line.new(bar_index, sTp2, x2, sTp2, xloc=xloc.bar_index, color=color.green, width=2)
+    label.new(x=x2, y=sEntry, text="ENTRY " + pr + " (" + sType + ")", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.gray, 20), textcolor=color.white, size=size.small)
+    label.new(x=x2, y=sSl, text="SL " + str.tostring(sSl, format.mintick) + "  " + str.tostring(math.abs(sEntry - sSl) / pipSz, "#.#") + " pips", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.red, 20), textcolor=color.white, size=size.small)
+    label.new(x=x2, y=sTp1, text="TP1 " + str.tostring(sTp1, format.mintick), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 40), textcolor=color.white, size=size.small)
+    label.new(x=x2, y=sTp2, text="TP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 20), textcolor=color.white, size=size.small)
+    label.new(x=bar_index, y=(sSide == 1 ? low : high), text=side + " " + grade + " " + str.tostring(score) + "/9\n" + sStrat, xloc=xloc.bar_index, style=sSide == 1 ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.normal, tooltip="Missing: " + failed)
+    alert(side + " " + syminfo.ticker + " " + timeframe.period + " | " + sStrat + " | grade " + grade + " (" + str.tostring(score) + "/9) | entry " + pr + " (" + sType + ") | SL " + str.tostring(sSl, format.mintick) + " | TP1 " + str.tostring(sTp1, format.mintick) + " | TP2 " + str.tostring(sTp2, format.mintick) + " | Not financial advice", alert.freq_once_per_bar_close)
+
+alertcondition(sFire and sSide == 1, "FX Desk BUY signal", "FX Desk BUY {{ticker}} {{interval}}")
+alertcondition(sFire and sSide == -1, "FX Desk SELL signal", "FX Desk SELL {{ticker}} {{interval}}")
+
+// ------------------------------------------------------------------ lines on the chart
+plot(showPD ? pdH : na, "Previous day high", color.new(color.orange, 10), 1, plot.style_linebr)
+plot(showPD ? pdL : na, "Previous day low", color.new(color.orange, 10), 1, plot.style_linebr)
+plot(showPW ? pwH : na, "Previous week high", color.new(color.yellow, 20), 1, plot.style_linebr)
+plot(showPW ? pwL : na, "Previous week low", color.new(color.yellow, 20), 1, plot.style_linebr)
+plot(showAsia and not inAsia ? asiaH : na, "Asia high", color.new(color.blue, 10), 1, plot.style_linebr)
+plot(showAsia and not inAsia ? asiaL : na, "Asia low", color.new(color.blue, 10), 1, plot.style_linebr)
+plot(showToday ? dayH : na, "Today high", color.new(color.gray, 30), 1, plot.style_circles)
+plot(showToday ? dayL : na, "Today low", color.new(color.gray, 30), 1, plot.style_circles)
+plot(showOpens ? dayO : na, "Daily open", color.new(color.aqua, 20), 1, plot.style_linebr)
+plot(showOpens ? midO : na, "Midnight open", color.new(color.teal, 20), 1, plot.style_linebr)
+plot(showOpens ? weekO : na, "Weekly open", color.new(color.fuchsia, 30), 1, plot.style_linebr)
+plot(showMA ? sma50 : na, "SMA 50", color.new(color.aqua, 0), 2)
+plot(showMA ? sma100 : na, "SMA 100", color.new(color.purple, 0), 2)
+plot(showMA ? sma200 : na, "SMA 200", color.new(color.white, 0), 3)
+
+// ------------------------------------------------------------------ names on the right + info table
+f_lbl(arr, txt, p, col) =>
+    if not na(p)
+        array.push(arr, label.new(x=bar_index + 2, y=p, text=txt + " " + str.tostring(p, format.mintick), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(col, 100), textcolor=col, size=size.small))
+    true
+
+var table info = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 25), border_width=1)
+
+if barstate.islast
+    for l in lvlLbls
+        label.delete(l)
+    array.clear(lvlLbls)
+    if showLbl
+        if showPD
+            f_lbl(lvlLbls, "PDH", pdH, color.orange)
+            f_lbl(lvlLbls, "PDL", pdL, color.orange)
+        if showPW
+            f_lbl(lvlLbls, "PWH", pwH, color.yellow)
+            f_lbl(lvlLbls, "PWL", pwL, color.yellow)
+        if showAsia and not inAsia
+            f_lbl(lvlLbls, "Asia H", asiaH, color.blue)
+            f_lbl(lvlLbls, "Asia L", asiaL, color.blue)
+        if showToday
+            f_lbl(lvlLbls, "Today H", dayH, color.gray)
+            f_lbl(lvlLbls, "Today L", dayL, color.gray)
+        if showOpens
+            f_lbl(lvlLbls, "Daily open", dayO, color.aqua)
+            f_lbl(lvlLbls, "Midnight open", midO, color.teal)
+            f_lbl(lvlLbls, "Weekly open", weekO, color.fuchsia)
+
+    string trendTxt = trendUp ? "Bullish" : trendDn ? "Bearish" : "Ranging"
+    string htfTxt = htfUp ? "Bullish" : htfDn ? "Bearish" : "Ranging"
+    string sessTxt = inLon ? "London killzone" : inNyAm ? "New York AM killzone" : inNyPm ? "New York PM killzone" : inAsia ? "Asia" : timeframe.isintraday ? "Off-hours" : "n/a (daily+)"
+    float eq = (not na(ph1) and not na(pl1)) ? (ph1 + pl1) / 2 : na
+    string zoneTxt = na(eq) ? "n/a" : close > eq ? "Premium (sells)" : "Discount (buys)"
+    string maTxt = na(sma200) ? "n/a" : close > sma200 ? "Above SMA 200" : "Below SMA 200"
+    color tCol = trendUp ? color.green : trendDn ? color.red : color.gray
+    color hCol = htfUp ? color.green : htfDn ? color.red : color.gray
+    table.cell(info, 0, 0, "FX Signal Desk", text_color=color.white, text_halign=text.align_left, text_size=size.small)
+    table.cell(info, 1, 0, syminfo.ticker + " " + timeframe.period, text_color=color.white, text_halign=text.align_right, text_size=size.small)
+    table.cell(info, 0, 1, "Trend", text_color=color.silver, text_halign=text.align_left, text_size=size.small)
+    table.cell(info, 1, 1, trendTxt, text_color=tCol, text_halign=text.align_right, text_size=size.small)
+    table.cell(info, 0, 2, "Higher TF (" + htfTf + ")", text_color=color.silver, text_halign=text.align_left, text_size=size.small)
+    table.cell(info, 1, 2, htfTxt, text_color=hCol, text_halign=text.align_right, text_size=size.small)
+    table.cell(info, 0, 3, "Session", text_color=color.silver, text_halign=text.align_left, text_size=size.small)
+    table.cell(info, 1, 3, sessTxt, text_color=color.white, text_halign=text.align_right, text_size=size.small)
+    table.cell(info, 0, 4, "Zone", text_color=color.silver, text_halign=text.align_left, text_size=size.small)
+    table.cell(info, 1, 4, zoneTxt, text_color=color.white, text_halign=text.align_right, text_size=size.small)
+    table.cell(info, 0, 5, "Average", text_color=color.silver, text_halign=text.align_left, text_size=size.small)
+    table.cell(info, 1, 5, maTxt, text_color=color.white, text_halign=text.align_right, text_size=size.small)
+    table.cell(info, 0, 6, "News", text_color=color.silver, text_halign=text.align_left, text_size=size.small)
+    table.cell(info, 1, 6, "Check Economic Calendar", text_color=color.yellow, text_halign=text.align_right, text_size=size.small)

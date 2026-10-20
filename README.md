@@ -1,61 +1,175 @@
-# fxbot - free forex signal bot
+<div align="center">
 
-Looks at forex pairs on three views (Scalp 15m, Swing 4H, Daily 1D), finds ICT and Set & Forget setups,
-and sends you a signal with entry, stop loss, take profit and the reasons, on Telegram and on a web dashboard.
-Everything here is free. No coding is needed to run it: you use buttons on GitHub.
+<img src="assets/banner.png" alt="FX Signal Desk" width="100%">
 
-## What it looks at
-- **Strategies:** ICT (liquidity sweep -> displacement -> fair value gap entry), a trend-pullback strategy, and a daily
-  Set & Forget (pin bar / engulfing candle at a swing level, order placed then left alone).
-- **On the chart:** fair value gaps and order blocks (drawn from where they formed), previous day / week highs and lows,
-  Asia range, London and New York session highs and lows, daily / midnight / weekly opens, round numbers, premium / discount
-  midpoint, 50 / 100 / 200 SMAs, chart patterns, killzone shading.
-- **A signal only appears** when enough checks agree (trend, higher timeframe, moving averages, killzone, key level,
-  FVG / order block, pattern, premium / discount, reward-to-risk) and never against the trend.
+<br>
 
-## Set up with clicks only
-The code is already in this repo. You only need to switch things on:
+[![CI](https://github.com/luciferalive/FX-Signal-Desk/actions/workflows/ci.yml/badge.svg)](https://github.com/luciferalive/FX-Signal-Desk/actions/workflows/ci.yml)
+[![Live dashboard](https://img.shields.io/badge/dashboard-live-2ecc9a?logo=githubpages&logoColor=white)](https://luciferalive.github.io/FX-Signal-Desk/)
+![Python](https://img.shields.io/badge/python-3.12-3776ab?logo=python&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Cost](https://img.shields.io/badge/cost-%240%20forever-brightgreen)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](CONTRIBUTING.md)
+
+**A free, open-source forex signal desk. Every signal comes with entry, stop loss, take profit and the reasons behind it.**<br>
+ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours and Telegram alerts. No server, no subscription.
+
+[**Open the dashboard**](https://luciferalive.github.io/FX-Signal-Desk/) · [**Quick start**](#-quick-start) · [**Contribute**](#-help-build-this) · [**Roadmap**](#-roadmap)
+
+</div>
+
+---
+
+## What you get
+
+<table>
+<tr>
+<td width="50%"><img src="assets/chart-dark.png" alt="Dark chart with levels, FVGs and a trade"></td>
+<td width="50%"><img src="assets/chart-light.png" alt="Light chart"></td>
+</tr>
+<tr>
+<td align="center"><sub>Dark mode: killzones, FVGs, daily / weekly levels, SMA 50 / 100 / 200 and the trade, all drawn on the chart</sub></td>
+<td align="center"><sub>Light mode. One button switches Auto / Light / Dark</sub></td>
+</tr>
+</table>
+
+> **Heads up:** screenshots use **made-up demo prices and sample news** so they never go stale. The live dashboard shows real data.
+
+<table>
+<tr>
+<td width="33%"><img src="assets/signal-card.png" alt="Signal card"></td>
+<td width="33%"><img src="assets/news-dark.png" alt="News panel"></td>
+<td width="33%"><img src="assets/telegram-alert.png" alt="Telegram alert"></td>
+</tr>
+<tr>
+<td align="center"><sub>Signal card: grade, entry, SL, TP and reasons</sub></td>
+<td align="center"><sub>News for the selected pair: red high, yellow medium, green low</sub></td>
+<td align="center"><sub>The same signal as a Telegram message</sub></td>
+</tr>
+</table>
+
+<div align="center"><img src="assets/phone.png" alt="Works on a phone" height="420"><br><sub>Works on a phone. Add it to your home screen.</sub></div>
+
+## Features
+
+- **30 instruments:** all 28 major, minor and cross pairs, plus gold (XAUUSD) and silver (XAGUSD). Edit `pairs.txt` to change the list.
+- **9 timeframes:** 1m, 5m, 15m, 30m, 1h, 4h, 1D, 1W, 1M.
+- **Everything on the chart:** fair value gaps, order blocks, premium / discount, today / previous day / previous week highs and lows, Asia and session ranges, daily / midnight / weekly opens, round-number handles, SMA 50 / 100 / 200.
+- **Killzones in New York time:** London, NY AM, NY PM.
+- **Multi-confirmation signals:** a trade needs enough of 9 checks to agree and never goes against the trend. Each signal is graded A to D.
+- **Fundamental news panel:** Forex Factory calendar filtered to the pair, coloured by impact, with a warning before high-impact releases.
+- **Live chart tab:** the free TradingView widget for real-time prices.
+- **Telegram alerts** with de-duplication, so you do not get the same signal twice.
+- **TradingView indicator** (`pine/fx_signal_desk.pine`) for true live signals inside TradingView.
+- **Honest backtesting:** a `validate` replay with no look-ahead, win rate and average R by grade.
+- **Light and dark themes.**
+- **Free hosting:** GitHub Pages and GitHub Actions. Nothing to pay for.
+
+## How it works
+
+```mermaid
+flowchart LR
+    Y[Yahoo Finance prices] --> A
+    F[Forex Factory calendar] --> A
+    subgraph GH[GitHub Actions - every ~15 min]
+        A[Analysis engine<br/>levels, FVG, SMAs, patterns] --> S[Strategies + confirmation gate]
+    end
+    S --> D[GitHub Pages dashboard]
+    S --> T[Telegram alert]
+    TV[TradingView] -. live price tab .-> D
+    P[Pine indicator] -. live signals .-> TV
+```
+
+## Quick start
+
+### Path 1: the dashboard (clicks only)
 1. Repo **Settings > Pages > Build and deployment > Source: GitHub Actions**.
-2. Repo **Actions** tab. If GitHub asks, press **I understand my workflows, go ahead and enable them**.
-3. **Actions > dashboard > Run workflow**. After about 2 minutes your page is at
-   `https://luciferalive.github.io/FX-Signal-Desk/` (open it on your phone and add it to your home screen).
-4. Set up Telegram (below), then **Actions > telegram-test > Run workflow**. A message should arrive.
-5. **Actions > scan** runs by itself every 15 minutes on weekdays. Press **Run workflow** once to test it now.
+2. Open the **Actions** tab. If asked, press **I understand my workflows, go ahead and enable them**.
+3. **Actions > dashboard > Run workflow**. After about 2 minutes your page is live at
+   `https://luciferalive.github.io/FX-Signal-Desk/`. On a phone, add it to your home screen.
+4. It refreshes by itself about every 15 minutes on weekdays (GitHub can run it a little late).
 
-### Telegram in 5 steps
-1. In Telegram search **@BotFather**, send `/newbot`, pick a name and a username ending in `bot`. Copy the token it gives you.
-2. Open your new bot and press **Start**, then send it the word `hi`.
-3. In a browser open `https://api.telegram.org/bot` + your token + `/getUpdates`. Find `"chat":{"id":` and copy the number after it.
-4. GitHub repo **Settings > Secrets and variables > Actions > New repository secret**. Add `TELEGRAM_BOT_TOKEN` (the token)
-   and `TELEGRAM_CHAT_ID` (the number). Names must match exactly.
-5. Run **telegram-test** (Actions tab). Read the log: it says SUCCESS or tells you what to fix.
+### Path 2: Telegram alerts
+1. In Telegram search **@BotFather**, send `/newbot`, pick a name and a username ending in `bot`. Copy the token.
+2. Open your new bot, press **Start**, and send `hi`.
+3. In a browser open `https://api.telegram.org/bot` + your token + `/getUpdates`. Copy the number after `"chat":{"id":`.
+4. Repo **Settings > Secrets and variables > Actions > New repository secret**. Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Names must match exactly.
+5. **Actions > telegram-test > Run workflow**. A message should arrive. After that, **scan** runs by itself every 15 minutes on weekdays.
 
-## Choose your pairs
-Edit `pairs.txt` on GitHub (open it, press the pencil icon, change the list, Commit). One pair per line, for example
-`EURUSD`, `GBPJPY`, `XAUUSD`. You do not need to supply any chart data: the bot downloads prices itself.
+### Path 3: live signals inside TradingView
+1. Open a chart on TradingView and the **Pine Editor** tab at the bottom.
+2. Paste the contents of [`pine/fx_signal_desk.pine`](pine/fx_signal_desk.pine) and press **Add to chart**.
+3. For alerts: **Add alert**, choose **FX Signal Desk**, condition **Any alert() function call**.
+4. TradingView has its own Economic Calendar for news.
 
-## Check how well it works
-**Actions > validate > Run workflow**, choose a pair and a style. It replays the live rules over past prices and prints
-win rate, average R, profit factor and drawdown by grade. Look for 100+ trades and a positive average R after costs.
-Free Yahoo data is limited (about 60 days for 15m, 2 years for 4H / daily), so small samples are normal. For more history
-upload a CSV (Dukascopy export) and run the command line version, see below.
+## Strategies
 
-## Command line (optional)
+| Strategy | Idea | Where |
+|---|---|---|
+| **ICT sweep + FVG** | Liquidity sweep, displacement with market structure shift, limit entry at the fair value gap midpoint | Scalp 15m, Swing 4H |
+| **Trend pullback** | Trade with the higher-timeframe trend after a pullback to a level or moving average | Scalp, Swing |
+| **Daily Set & Forget** | Pin bar or engulfing candle at a swing level on the daily chart, wide stop, fixed target | Daily |
+
+> The Set & Forget rules here are **my interpretation**, not an official copy of anyone's system. Know the exact rules? [Open a strategy idea.](https://github.com/luciferalive/FX-Signal-Desk/issues/new?template=strategy_idea.md)
+
+**The 9 confirmations:** trend, higher timeframe, SMAs, killzone, key level, FVG or order block, sweep or candle pattern, reward-to-risk of at least 2, premium / discount.
+
+| Timeframe | Signals | Analysis |
+|---|---|---|
+| 15m, 4H, 1D | Yes | Yes |
+| 1m, 5m, 30m, 1h, 1W, 1M | No | Yes (levels, zones, SMAs, patterns, trend) |
+
+## Other commands
+
 ```bash
 pip install -r requirements.txt
 python -m fxbot analyze --symbol EURUSD --mode scalp
-python -m fxbot dashboard
+python -m fxbot dashboard --demo --out demo       # offline demo with made-up prices
 python -m fxbot validate --symbol EURUSD --mode swing
 python -m fxbot validate --symbol EURUSD --mode scalp --csv eurusd_15m.csv
 python -m fxbot backtest --symbol EURUSD --strategy ict --mode swing
-python -m fxbot demo        # offline, synthetic data (layout / pipeline check only)
+python -m pytest -q
 ```
 
-## Good to know
-- GitHub pauses scheduled workflows in a public repo after about 60 days with no activity. Press **Run workflow** on `scan`
-  now and then, or make a small edit, to keep it alive.
-- Yahoo sometimes refuses requests from cloud servers. The bot retries; if a run shows "No data", the next run usually works.
-- The Pages dashboard of a Public repo is public. No tokens are stored in the code.
-- TradingView cannot be scraped and its webhooks need a paid plan. `pine/ict_sessions.pine` works on a free account for
-  killzones and sweeps. `python -m fxbot webhook` receives TradingView alerts if you ever upgrade.
-- Backtests are not predictions. Paper trade first. Not financial advice.
+Free Yahoo data is limited (about 60 days of 15m, 2 years of 4H / daily). For longer tests use a Dukascopy CSV export.
+
+## Project layout
+
+```
+fxbot/            analysis, zones, strategies, news, scanner, dashboard, backtest
+fxbot/templates/  the dashboard page
+pine/             TradingView indicator
+tests/            pytest suite
+pairs.txt         your instruments
+.github/workflows CI, scan, dashboard, telegram-test, validate
+assets/           README images
+```
+
+## Roadmap
+
+Good first contributions:
+
+- [ ] Exact Alex Set & Forget rules (needs someone who knows them)
+- [ ] More ICT models: Silver Bullet, breaker blocks, mitigation blocks
+- [ ] Order blocks in the Pine indicator
+- [ ] Discord and email alerts
+- [ ] Longer history through Dukascopy data
+- [ ] Signal history page and performance tracker
+- [ ] More tests and a bigger replay suite
+- [ ] Translations
+
+## Help build this
+
+Contributions are very welcome, whether you code or not: strategy rules, bug reports, screenshots, docs, tests.
+Read [CONTRIBUTING.md](CONTRIBUTING.md), pick something from the roadmap, and open an issue or pull request.
+If it is useful to you, a star helps others find it.
+
+## Disclaimer
+
+This is an educational tool, **not financial advice**. No result is promised: there are no win-rate claims here, and
+a signal is a starting point, not a guarantee. Run `validate`, paper trade first, and never risk money you cannot afford to lose.
+Free data can be delayed or wrong. Never share your Telegram token.
+
+## License
+
+[MIT](LICENSE)

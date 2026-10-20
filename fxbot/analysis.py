@@ -320,28 +320,39 @@ def _sma_agrees(smas: dict, price: float, side: int) -> bool:
 
 
 def analyze(symbol: str, mode: str, df: pd.DataFrame, df_htf: pd.DataFrame | None = None, htf_name: str = "",
-            strict: bool = True, min_ratio: float = 0.6) -> dict:
+            strict: bool = True, min_ratio: float = 0.6, *, interval: str | None = None,
+            signals: bool = True, intraday: bool | None = None) -> dict:
+    """mode: the tuned view ('scalp' / 'swing' / 'daily') or 'view' for analysis-only timeframes.
+    signals=False gives levels, zones, averages, patterns and trend but never a trade signal."""
     pip = pip_size(symbol)
     dec = 3 if pip == 0.01 else 2 if pip == 0.1 else 5
-    interval = MODES[mode]["interval"]
+    interval = interval or MODES[mode]["interval"]
+    if intraday is None:
+        intraday = mode != "daily"
     a = float(atr(df).iloc[-1])
     price = float(df["close"].iloc[-1])
-    sess = "Daily candle" if mode == "daily" else str(session_labels(df.index)[-1])
-    sb = silver_bullet_now(df.index) if mode == "scalp" else None
+    sess = str(session_labels(df.index)[-1]) if intraday else "Daily candle"
+    sb = silver_bullet_now(df.index) if mode == "scalp" and intraday else None
     trend = trend_state(df)
     htf = trend_state(df_htf) if df_htf is not None and len(df_htf) > 60 else None
-    levels = key_levels(df, symbol, intraday=(mode != "daily"))
+    levels = key_levels(df, symbol, intraday=intraday)
+    if interval in ("1w", "1M"):  # on these charts one candle is a week / month, so rename the "previous day" levels
+        unit = "Week" if interval == "1w" else "Month"
+        ren = {"PDH": f"Prev {unit} High", "PDL": f"Prev {unit} Low"}
+        if interval == "1M":
+            ren["Weekly Open"] = "Monthly Open"
+        levels = [dict(L, name=ren.get(L["name"], L["name"])) for L in levels if L["name"] not in ("PWH", "PWL")]
     pats = detect_patterns(df, levels)
     fvgs, obs = find_fvgs(df), find_obs(df)
     rng = dealing_range(df)
     smas = sma_values(df)
 
     cands = []
-    for s, status in _fresh_strategy_signals(df, symbol, mode):
+    for s, status in (_fresh_strategy_signals(df, symbol, mode) if signals else []):
         cands.append(dict(side=s.side, entry=s.entry, sl=s.sl, tp=s.tp, rr=s.rr, entry_type=s.entry_type,
                           status=status, strategy=f"{s.strategy.upper()} {mode}", why=s.reason, expiry=s.expiry,
                           time=s.time.isoformat()))
-    for p in pats:
+    for p in (pats if signals else []):
         if p["side"] and p["status"] == "confirmed" and p.get("brk_recent") and "target" in p:
             risk = abs(price - p["sl"])
             reward = abs(p["target"] - price)

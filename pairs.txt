@@ -1,10 +1,51 @@
-# One pair per line. Add or remove pairs here, then save (commit) the file.
-# Examples that work: EURUSD GBPUSD USDJPY GBPJPY EURJPY AUDUSD NZDUSD USDCAD USDCHF EURGBP XAUUSD
-# (XAUUSD uses gold futures prices, which differ slightly from spot gold.)
+# One pair per line. Add or remove pairs here, then save (commit) the file. Lines starting with # are ignored.
+# Any pair written like EURUSD works. Gold and silver (XAUUSD, XAGUSD) use futures prices, which differ slightly from spot.
+
+# Majors
 EURUSD
 GBPUSD
 USDJPY
-GBPJPY
-AUDUSD
+USDCHF
 USDCAD
+AUDUSD
+NZDUSD
+
+# EUR crosses
+EURGBP
+EURJPY
+EURCHF
+EURAUD
+EURCAD
+EURNZD
+
+# GBP crosses
+GBPJPY
+GBPCHF
+GBPAUD
+GBPCAD
+GBPNZD
+
+# AUD, NZD, CAD, CHF crosses
+AUDJPY
+AUDCHF
+AUDCAD
+AUDNZD
+NZDJPY
+NZDCHF
+NZDCAD
+CADJPY
+CADCHF
+CHFJPY
+
+# Metals
 XAUUSD
+XAGUSD
+
+# More you can switch on by removing the # (each pair adds a little time to every update)
+# USDINR
+# USDZAR
+# USDMXN
+# USDSGD
+# USDHKD
+# USDNOK
+# USDSEK
