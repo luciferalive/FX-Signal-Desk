@@ -1,4 +1,4 @@
-# fxbot - free forex signal bot
+fxbot - free forex signal bot
 
 Looks at forex pairs on three views (Scalp 15m, Swing 4H, Daily 1D), finds ICT and Set & Forget setups,
 and sends you a signal with entry, stop loss, take profit and the reasons, on Telegram and on a web dashboard.
