@@ -47,15 +47,30 @@ jobs:
           npx --yes dukascopy-node -i "$sym" -from "$from" -to "$to" -t m15 -f csv -dir history
           ls -la history
       - name: Replay history
+        shell: bash
         env:
           SYMBOL: ${{ inputs.symbol }}
           MODE: ${{ inputs.mode }}
         run: |
+          set -o pipefail
           f=$(ls history/*.csv | head -1)
-          head -3 "$f"
-          python -m fxbot validate --symbol "$SYMBOL" --mode "$MODE" --csv "$f" | tee report.txt
-          { echo "### Backtest: $SYMBOL ($MODE)"; echo '```'; cat report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "File: $f"
+            echo "Rows: $(wc -l < "$f")"
+            echo "First lines:"; head -3 "$f"
+            echo "Last line:"; tail -1 "$f"
+            echo
+          } 2>&1 | tee report.txt
+          python -m fxbot validate --symbol "$SYMBOL" --mode "$MODE" --csv "$f" 2>&1 | tee -a report.txt
+      - name: Show results on the summary page
+        if: always()
+        env:
+          SYMBOL: ${{ inputs.symbol }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          { echo "### Backtest: $SYMBOL ($MODE)"; echo '```'; cat report.txt 2>/dev/null || echo "no report was written"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: backtest-report
           path: report.txt
