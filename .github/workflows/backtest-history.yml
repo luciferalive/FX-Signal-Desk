@@ -36,6 +36,7 @@ jobs:
           node-version: "20"
       - run: pip install -r requirements.txt
       - name: Download 15 minute history from Dukascopy
+        shell: bash
         env:
           SYMBOL: ${{ inputs.symbol }}
           YEARS: ${{ inputs.years }}
@@ -43,9 +44,22 @@ jobs:
           sym=$(echo "$SYMBOL" | tr 'A-Z' 'a-z' | tr -cd 'a-z')
           from=$(date -u -d "$YEARS years ago" +%F)
           to=$(date -u -d "yesterday" +%F)
-          echo "Downloading $sym from $from to $to"
-          npx --yes dukascopy-node -i "$sym" -from "$from" -to "$to" -t m15 -f csv -dir history
-          ls -la history
+          echo "Downloading $sym from $from to $to" | tee dl.log
+          rm -rf history; mkdir -p history
+          # slow and patient: small batches, pauses, retries
+          npx --yes dukascopy-node -i "$sym" -from "$from" -to "$to" -t m15 -f csv -dir history \
+            -bs 5 -bp 1000 -r 5 -rp 2000 -v 2>&1 | tail -60 | tee -a dl.log || true
+          f=$(ls history/*.csv 2>/dev/null | head -1)
+          rows=0; [ -n "$f" ] && rows=$(wc -l < "$f")
+          echo "Rows downloaded: $rows" | tee -a dl.log
+          if [ "$rows" -lt 1000 ]; then
+            echo "Too little data, trying one month as a test..." | tee -a dl.log
+            rm -rf test; mkdir test
+            npx --yes dukascopy-node -i "$sym" -from "$(date -u -d '35 days ago' +%F)" -to "$to" -t m15 -f csv -dir test -r 5 -rp 2000 -v 2>&1 | tail -40 | tee -a dl.log || true
+            ls -la test | tee -a dl.log
+          fi
+          cp dl.log report.txt
+          [ "$rows" -ge 1000 ] || { echo "Download failed: no usable data (see log above)." | tee -a report.txt; exit 1; }
       - name: Replay history
         shell: bash
         env:
@@ -60,7 +74,7 @@ jobs:
             echo "First lines:"; head -3 "$f"
             echo "Last line:"; tail -1 "$f"
             echo
-          } 2>&1 | tee report.txt
+          } 2>&1 | tee -a report.txt
           python -m fxbot validate --symbol "$SYMBOL" --mode "$MODE" --csv "$f" 2>&1 | tee -a report.txt
       - name: Show results on the summary page
         if: always()
