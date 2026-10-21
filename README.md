@@ -10,6 +10,14 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Cost](https://img.shields.io/badge/cost-%240%20forever-brightgreen)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-ff69b4.svg)](CONTRIBUTING.md)
+<br>
+[![Stars](https://img.shields.io/github/stars/luciferalive/FX-Signal-Desk?style=social)](https://github.com/luciferalive/FX-Signal-Desk/stargazers)
+[![Last commit](https://img.shields.io/github/last-commit/luciferalive/FX-Signal-Desk?color=8a7bff)](https://github.com/luciferalive/FX-Signal-Desk/commits/main)
+[![Issues](https://img.shields.io/github/issues/luciferalive/FX-Signal-Desk?color=f5b942)](https://github.com/luciferalive/FX-Signal-Desk/issues)
+![Telegram](https://img.shields.io/badge/alerts-Telegram-26a5e4?logo=telegram&logoColor=white)
+![TradingView](https://img.shields.io/badge/indicator-TradingView-131722?logo=tradingview&logoColor=white)
+![Pairs](https://img.shields.io/badge/pairs-30-2ecc9a)
+![Timeframes](https://img.shields.io/badge/timeframes-1m%E2%86%921M-2ecc9a)
 
 **A free, open-source forex signal desk. Every signal comes with entry, stop loss, take profit and the reasons behind it.**<br>
 ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours and Telegram alerts. No server, no subscription.
@@ -19,6 +27,17 @@ ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours
 </div>
 
 ---
+
+## Why FX Signal Desk?
+
+| | Typical signal group | Paid TradingView scripts | **FX Signal Desk** |
+|---|---|---|---|
+| Price | Monthly fee | Monthly fee | **Free forever** |
+| Shows the reasons | Rarely | Sometimes | **Always, every signal** |
+| Checks the news calendar | No | No | **Yes, with warnings** |
+| You can test it on history | No | Sometimes | **Yes, one click** |
+| Open source, you can change it | No | No | **Yes, MIT** |
+| Runs while your PC is off | Yes | Needs TradingView open | **Yes, on GitHub** |
 
 ## What you get
 
@@ -50,6 +69,14 @@ ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours
 
 <div align="center"><img src="assets/phone.png" alt="Works on a phone" height="420"><br><sub>Works on a phone. Add it to your home screen.</sub></div>
 
+## A day with the desk
+
+1. **Weekdays, every ~15 minutes:** GitHub downloads fresh prices and the news calendar.
+2. **The engine** maps levels, gaps, killzones and trend, then counts how many of 9 checks agree.
+3. **Only strong setups get through.** You get a Telegram message with entry, SL, TP and the reasons.
+4. **You open the dashboard** to see the same trade drawn on the chart, with the news colour for that pair.
+5. **Want proof?** Press one button to replay the rules over years of real history.
+
 ## Features
 
 - **30 instruments:** all 28 major, minor and cross pairs, plus gold (XAUUSD) and silver (XAGUSD). Edit `pairs.txt` to change the list.
@@ -61,9 +88,20 @@ ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours
 - **Live chart tab:** the free TradingView widget for real-time prices.
 - **Telegram alerts** with de-duplication, so you do not get the same signal twice.
 - **TradingView indicator** (`pine/fx_signal_desk.pine`) for true live signals inside TradingView.
-- **Honest backtesting:** a `validate` replay with no look-ahead, win rate and average R by grade.
+- **One-click backtest on real history:** downloads up to 3 years from Dukascopy and replays the rules with no look-ahead, win rate and average R by grade.
 - **Light and dark themes.**
 - **Free hosting:** GitHub Pages and GitHub Actions. Nothing to pay for.
+
+## Automations (all run on GitHub, all free)
+
+| Workflow | What it does | When |
+|---|---|---|
+| `scan` | Looks for setups and sends Telegram alerts | Every ~15 min, Mon-Fri |
+| `dashboard` | Rebuilds and publishes the web dashboard | Every ~15 min, Mon-Fri |
+| `telegram-test` | Sends a test message to check your setup | Button |
+| `validate` | Quick replay on recent Yahoo data | Button |
+| `backtest-history` | Downloads years of Dukascopy data and replays the rules | Button |
+| `ci` | Runs the tests on every change | On every push |
 
 ## How it works
 
@@ -96,7 +134,13 @@ flowchart LR
 4. Repo **Settings > Secrets and variables > Actions > New repository secret**. Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Names must match exactly.
 5. **Actions > telegram-test > Run workflow**. A message should arrive. After that, **scan** runs by itself every 15 minutes on weekdays.
 
-### Path 3: live signals inside TradingView
+### Path 3: test it on real history
+1. **Actions > backtest-history > Run workflow**.
+2. Choose a pair (for example `EURUSD`), a style (`swing`, `scalp`, `daily`) and years (`2`).
+3. Wait 10 to 40 minutes, then open the run. The report is on the summary page: trades, win rate, average R, profit factor and drawdown for each grade.
+4. Look for 100+ trades and a positive average R after costs. Grades A and B should beat C and D, otherwise the filter is not helping.
+
+### Path 4: live signals inside TradingView
 1. Open a chart on TradingView and the **Pine Editor** tab at the bottom.
 2. Paste the contents of [`pine/fx_signal_desk.pine`](pine/fx_signal_desk.pine) and press **Add to chart**.
 3. For alerts: **Add alert**, choose **FX Signal Desk**, condition **Any alert() function call**.
@@ -131,7 +175,7 @@ python -m fxbot backtest --symbol EURUSD --strategy ict --mode swing
 python -m pytest -q
 ```
 
-Free Yahoo data is limited (about 60 days of 15m, 2 years of 4H / daily). For longer tests use a Dukascopy CSV export.
+Free Yahoo data is limited (about 60 days of 15m, 2 years of 4H / daily). For longer tests use the `backtest-history` button, or a Dukascopy CSV export.
 
 ## Project layout
 
@@ -141,7 +185,7 @@ fxbot/templates/  the dashboard page
 pine/             TradingView indicator
 tests/            pytest suite
 pairs.txt         your instruments
-.github/workflows CI, scan, dashboard, telegram-test, validate
+.github/workflows CI, scan, dashboard, telegram-test, validate, backtest-history
 assets/           README images
 ```
 
@@ -153,16 +197,25 @@ Good first contributions:
 - [ ] More ICT models: Silver Bullet, breaker blocks, mitigation blocks
 - [ ] Order blocks in the Pine indicator
 - [ ] Discord and email alerts
-- [ ] Longer history through Dukascopy data
+- [x] Longer history through Dukascopy data (`backtest-history`)
 - [ ] Signal history page and performance tracker
 - [ ] More tests and a bigger replay suite
 - [ ] Translations
+- [ ] Publish backtest results for each pair in the repo (honest numbers, committed with the code)
+- [ ] Prop-firm risk rules (daily loss limit, max drawdown) in alerts
 
 ## Help build this
 
 Contributions are very welcome, whether you code or not: strategy rules, bug reports, screenshots, docs, tests.
 Read [CONTRIBUTING.md](CONTRIBUTING.md), pick something from the roadmap, and open an issue or pull request.
 If it is useful to you, a star helps others find it.
+
+**Not a coder? You can still help:**
+- Send exact strategy rules you trade (use the *Strategy idea* template).
+- Test it on your favourite pair and report what looked wrong.
+- Share screenshots of setups that worked or failed, honestly.
+
+[![Contributors](https://contrib.rocks/image?repo=luciferalive/FX-Signal-Desk)](https://github.com/luciferalive/FX-Signal-Desk/graphs/contributors)
 
 ## Disclaimer
 
