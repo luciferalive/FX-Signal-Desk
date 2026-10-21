@@ -84,3 +84,12 @@ def test_demo_dashboard_builds_with_all_timeframes_and_news():
         pair = json.load(open(os.path.join(d, "data", "EURUSD.json")))
         assert set(pair["tfs"]) == set(TIMEFRAMES)
         assert json.load(open(os.path.join(d, "data", "news.json")))["ok"] is True
+
+
+def test_load_csv_epoch_milliseconds(tmp_path):
+    from fxbot.data import load_csv
+    p = tmp_path / "x.csv"
+    p.write_text("timestamp,open,high,low,close,volume\n"
+                 "1735689600000,1.1,1.2,1.0,1.15,1\n1735690500000,1.15,1.2,1.1,1.18,1\n")
+    df = load_csv(str(p))
+    assert str(df.index[0]) == "2025-01-01 00:00:00+00:00" and len(df) == 2

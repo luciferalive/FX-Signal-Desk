@@ -97,7 +97,12 @@ def load_csv(path: str, interval: str | None = None) -> pd.DataFrame:
     raw = pd.read_csv(path)
     raw.columns = [c.strip().lower() for c in raw.columns]
     tcol = next(c for c in ("time", "datetime", "date", "timestamp", "gmt time", "local time") if c in raw.columns)
-    raw.index = pd.to_datetime(raw[tcol], utc=True, dayfirst=False)
+    col = raw[tcol]
+    if pd.api.types.is_numeric_dtype(col):  # epoch numbers (dukascopy-node writes milliseconds)
+        unit = "ms" if col.abs().max() > 1e11 else "s"
+        raw.index = pd.to_datetime(col, unit=unit, utc=True)
+    else:
+        raw.index = pd.to_datetime(col, utc=True, dayfirst=False)
     df = _clean(raw)
     return resample(df, interval) if interval else df
 

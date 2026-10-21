@@ -1,0 +1,61 @@
+name: backtest-history
+# Downloads past prices from Dukascopy (free) and replays the bot's rules over them.
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: "Pair, for example EURUSD (also XAUUSD)"
+        required: true
+        default: "EURUSD"
+      mode:
+        description: "Style"
+        required: true
+        type: choice
+        options: [swing, scalp, daily]
+        default: swing
+      years:
+        description: "How many years back (1 to 3)"
+        required: true
+        default: "2"
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: pip install -r requirements.txt
+      - name: Download 15 minute history from Dukascopy
+        env:
+          SYMBOL: ${{ inputs.symbol }}
+          YEARS: ${{ inputs.years }}
+        run: |
+          sym=$(echo "$SYMBOL" | tr 'A-Z' 'a-z' | tr -cd 'a-z')
+          from=$(date -u -d "$YEARS years ago" +%F)
+          to=$(date -u -d "yesterday" +%F)
+          echo "Downloading $sym from $from to $to"
+          npx --yes dukascopy-node -i "$sym" -from "$from" -to "$to" -t m15 -f csv -dir history
+          ls -la history
+      - name: Replay history
+        env:
+          SYMBOL: ${{ inputs.symbol }}
+          MODE: ${{ inputs.mode }}
+        run: |
+          f=$(ls history/*.csv | head -1)
+          head -3 "$f"
+          python -m fxbot validate --symbol "$SYMBOL" --mode "$MODE" --csv "$f" | tee report.txt
+          { echo "### Backtest: $SYMBOL ($MODE)"; echo '```'; cat report.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: backtest-report
+          path: report.txt
