@@ -15,6 +15,8 @@ import pandas as pd
 
 from . import DEFAULT_SYMBOLS
 from .analysis import analyze
+from .config import load as load_config
+from .workflow import evaluate
 from .data import load_frames, resample, synthetic
 from .modes import TIMEFRAMES
 from .news import fetch_news, sample_news
@@ -66,6 +68,8 @@ def _stamp(an: dict) -> dict:
         p["t"] = _t(p["time"])
     if an["signal"]:
         an["signal"]["t"] = _t(an["signal"]["time"])
+    for h in an.get("history", []):
+        h["t"] = _t(h["time"])
     return an
 
 
@@ -120,6 +124,22 @@ def demo_frames(symbols: list[str]) -> dict:
 
 
 # ---------------------------------------------------------------- analysis
+def workflow_block(sym: str, frames: dict, cfg: dict, events: list) -> dict | None:
+    """The 1h -> 15m -> 5m (-> 1m) decision for one pair, in plain JSON for the page."""
+    try:
+        r = evaluate(sym, frames, cfg, events)
+    except Exception as e:
+        print(f"[dashboard] {sym} workflow: {type(e).__name__}: {e}")
+        return None
+    if r.get("plan"):
+        r["plan"] = _clean(r["plan"])
+        for L in r["plan"].get("levels", []):
+            L["t"] = _t(L["t"])
+    if r.get("signal"):
+        r["signal"]["t"] = _t(r["signal"]["timestamp"])
+    return r
+
+
 def analyse_pair(sym: str, frames: dict) -> dict:
     """{timeframe: {an, candles, sma}} for one pair. A timeframe that fails is skipped, not fatal."""
     out = {}
@@ -140,30 +160,40 @@ def analyse_pair(sym: str, frames: dict) -> dict:
     return out
 
 
-def summarize(sym: str, tfs: dict) -> dict:
+def summarize(sym: str, tfs: dict, wf: dict | None = None) -> dict:
     sig = {tf: dict(side=d["an"]["signal"]["side"], grade=d["an"]["signal"]["grade"], strategy=d["an"]["signal"]["strategy"])
-           for tf, d in tfs.items() if d["an"]["signal"]}
+           for tf, d in tfs.items() if d["an"]["signal"] and tf != "15m"}
+    if wf and wf.get("signal"):  # 15m signals come from the 1h -> 15m -> 5m workflow, the same one that sends Telegram alerts
+        s = wf["signal"]
+        sig["15m"] = dict(side=s["direction"], grade="A" if s["confidence"] >= 80 else "B" if s["confidence"] >= 65 else "C",
+                          strategy=s["strategy"])
     first = next(d for tf, d in tfs.items())  # TIMEFRAMES is ordered smallest first, so this is the freshest price
     return dict(symbol=sym, dec=first["an"]["price_dec"], price=first["an"]["price"], sig=sig, have=list(tfs))
 
 
-def build(symbols=None, out_dir: str = "docs", frames=None, news=None, demo: bool = False, inline: bool = False) -> str:
+def build(symbols=None, out_dir: str = "docs", frames=None, news=None, demo: bool = False, inline: bool = False,
+          cfg: dict | None = None) -> str:
     """frames: {symbol: {tf: candles}} or None for live Yahoo data. Returns the path of index.html."""
     symbols = symbols or DEFAULT_SYMBOLS
     if frames is None:
         frames = live_frames(symbols)
     news = news if news is not None else fetch_news()
+    cfg = cfg or load_config()
+    events = news.get("events", []) if isinstance(news, dict) and news.get("ok", True) else []
     pairs, index_pairs = {}, []
     for sym in symbols:
         tfs = analyse_pair(sym, frames.get(sym, {}))
         if tfs:
-            pairs[sym] = dict(symbol=sym, tfs=tfs)
-            index_pairs.append(summarize(sym, tfs))
+            pairs[sym] = dict(symbol=sym, tfs=tfs, workflow=workflow_block(sym, frames.get(sym, {}), cfg, events))
+            index_pairs.append(summarize(sym, tfs, pairs[sym]['workflow']))
     if not pairs:
         raise RuntimeError("no data for any symbol")
-    tf_list = [dict(key=k, label=v["label"], intraday=v["intraday"], signals=v["mode"] is not None, tv=v["tv"])
+    tf_list = [dict(key=k, label=v["label"], intraday=v["intraday"], signals=v["mode"] is not None, tv=v["tv"], mode=v["mode"])
                for k, v in TIMEFRAMES.items()]
-    index = dict(generated=pd.Timestamp.now(tz="UTC").isoformat(), demo=demo, tfs=tf_list, pairs=index_pairs)
+    from .strategies import FAMILIES, STRATEGIES
+    strat_list = [dict(key=k, **{x: v for x, v in c.describe().items() if x != "name"}) for k, c in STRATEGIES.items()]
+    index = dict(generated=pd.Timestamp.now(tz="UTC").isoformat(), demo=demo, tfs=tf_list, pairs=index_pairs,
+                 strategies=strat_list, families=FAMILIES, workflow=cfg["workflow"])
 
     tpl = open(TEMPLATE, encoding="utf-8").read()
     os.makedirs(out_dir, exist_ok=True)

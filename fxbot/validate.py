@@ -30,7 +30,7 @@ def replay(df_src: pd.DataFrame, symbol: str, mode: str = "swing", step: int = 3
     for k in range(first, len(base) - 1, step):
         now = base.index[k - 1] + bar  # moment the last candle closed
         htf = htf_full[htf_full.index + htf_bar <= now].iloc[-600:] if htf_full is not None else None
-        an = analyze(symbol, mode, base.iloc[max(0, k - win): k], htf, m["htf_name"], strict=True, min_ratio=min_ratio)
+        an = analyze(symbol, mode, base.iloc[max(0, k - win): k], htf, m["htf_name"], strict=True, min_ratio=min_ratio, detail=False)
         s = an["signal"]
         if not s:
             continue
@@ -41,7 +41,8 @@ def replay(df_src: pd.DataFrame, symbol: str, mode: str = "swing", step: int = 3
         t = base.index[k - 1]
         sigs.append(Signal(k - 1, t, symbol, s["strategy"], mode, 1 if s["side"] == "BUY" else -1, s["entry"],
                            s["sl"], s["tp2"], s["rr"], s["entry_type"], max(int(s["expiry"]), 1),
-                           "", an["session"]))
+                           "", an["session"], s.get("family", ""), m["interval"], an.get("regime", {}).get("label", "unknown"),
+                           s.get("invalidation", "")))
         grades[(t, s["strategy"])] = s["grade"]
         if progress and len(sigs) % 25 == 0:
             print(f"  ...{len(sigs)} signals (bar {k}/{len(base)})", flush=True)

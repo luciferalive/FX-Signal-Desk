@@ -17,6 +17,10 @@ on:
         description: "How many years back (1 to 3)"
         required: true
         default: "2"
+      step:
+        description: "Check every N candles (bigger = faster; use 12 for scalp, 3 for swing, 1 for daily)"
+        required: true
+        default: "6"
 
 permissions:
   contents: read
@@ -65,6 +69,7 @@ jobs:
         env:
           SYMBOL: ${{ inputs.symbol }}
           MODE: ${{ inputs.mode }}
+          STEP: ${{ inputs.step }}
         run: |
           set -o pipefail
           f=$(ls history/*.csv | head -1)
@@ -75,7 +80,7 @@ jobs:
             echo "Last line:"; tail -1 "$f"
             echo
           } 2>&1 | tee -a report.txt
-          python -m fxbot validate --symbol "$SYMBOL" --mode "$MODE" --csv "$f" 2>&1 | tee -a report.txt
+          python -m fxbot validate --symbol "$SYMBOL" --mode "$MODE" --csv "$f" --step "$STEP" 2>&1 | tee -a report.txt
       - name: Show results on the summary page
         if: always()
         env:

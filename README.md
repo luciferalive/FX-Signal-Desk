@@ -16,11 +16,12 @@
 [![Issues](https://img.shields.io/github/issues/luciferalive/FX-Signal-Desk?color=f5b942)](https://github.com/luciferalive/FX-Signal-Desk/issues)
 ![Telegram](https://img.shields.io/badge/alerts-Telegram-26a5e4?logo=telegram&logoColor=white)
 ![TradingView](https://img.shields.io/badge/indicator-TradingView-131722?logo=tradingview&logoColor=white)
+![Strategies](https://img.shields.io/badge/strategies-13-2ecc9a)
 ![Pairs](https://img.shields.io/badge/pairs-30-2ecc9a)
 ![Timeframes](https://img.shields.io/badge/timeframes-1m%E2%86%921M-2ecc9a)
 
 **A free, open-source forex signal desk. Every signal comes with entry, stop loss, take profit and the reasons behind it.**<br>
-ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours and Telegram alerts. No server, no subscription.
+13 strategies in 7 families, a 1h plan > 15m setup > 5m entry workflow, risk checks on every signal, key levels, fair value gaps, killzones, news colours and Telegram alerts. No server, no subscription.
 
 [**Open the dashboard**](https://luciferalive.github.io/FX-Signal-Desk/) · [**Quick start**](#-quick-start) · [**Contribute**](#-help-build-this) · [**Roadmap**](#-roadmap)
 
@@ -72,8 +73,8 @@ ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours
 ## A day with the desk
 
 1. **Weekdays, every ~15 minutes:** GitHub downloads fresh prices and the news calendar.
-2. **The engine** maps levels, gaps, killzones and trend, then counts how many of 9 checks agree.
-3. **Only strong setups get through.** You get a Telegram message with entry, SL, TP and the reasons.
+2. **The 1h chart plans** (bias and levels, never a trade by itself). The **15m** finds a setup that agrees. The **5m** confirms the entry.
+3. **A risk check decides.** Stop size, reward-to-risk, spread, volatility and session must pass, otherwise the answer is WAIT. A pass becomes a Telegram message with entry, SL, TP and the reasons.
 4. **You open the dashboard** to see the same trade drawn on the chart, with the news colour for that pair.
 5. **Want proof?** Press one button to replay the rules over years of real history.
 
@@ -83,12 +84,17 @@ ICT and trend setups, key levels, fair value gaps, killzones, SMAs, news colours
 - **9 timeframes:** 1m, 5m, 15m, 30m, 1h, 4h, 1D, 1W, 1M.
 - **Everything on the chart:** fair value gaps, order blocks, premium / discount, today / previous day / previous week highs and lows, Asia and session ranges, daily / midnight / weekly opens, round-number handles, SMA 50 / 100 / 200.
 - **Killzones in New York time:** London, NY AM, NY PM.
-- **Multi-confirmation signals:** a trade needs enough of 9 checks to agree and never goes against the trend. Each signal is graded A to D.
+- **13 strategies in 7 families** (ICT / SMC, trend, price action, breakout, mean reversion, scalping, swing). Turn each on or off in the dashboard, or run them all. Details and sources: [guides/STRATEGIES.md](guides/STRATEGIES.md).
+- **Multi-timeframe workflow:** 1h plan, 15m setup, 5m execution, optional 1m precision. A lower timeframe can never override the plan.
+- **Confluence without double counting:** agreement is counted per idea (family), so two breakout rules count as one vote. The 0 to 100 score is evidence, **not** a win probability.
+- **Risk checks on every signal:** stop size, minimum reward-to-risk, spread, volatility, session, de-duplication, plus a lot-size suggestion. The project never places orders.
+- **WAIT is a valid answer.** No setup means no signal, never a made-up one.
+- **Clean chart:** layers you can switch on and off, merged zones, compact markers with hover details.
 - **Fundamental news panel:** Forex Factory calendar filtered to the pair, coloured by impact, with a warning before high-impact releases.
 - **Live chart tab:** the free TradingView widget for real-time prices.
 - **Telegram alerts** with de-duplication, so you do not get the same signal twice.
 - **TradingView indicator** (`pine/fx_signal_desk.pine`) for true live signals inside TradingView.
-- **One-click backtest on real history:** downloads up to 3 years from Dukascopy and replays the rules with no look-ahead, win rate and average R by grade.
+- **One-click backtest on real history:** downloads up to 3 years from Dukascopy and replays the rules with no look-ahead, spread, slippage and commission included, a conservative stop-first rule when one candle hits both, and a development / evaluation split.
 - **Light and dark themes.**
 - **Free hosting:** GitHub Pages and GitHub Actions. Nothing to pay for.
 
@@ -110,7 +116,8 @@ flowchart LR
     Y[Yahoo Finance prices] --> A
     F[Forex Factory calendar] --> A
     subgraph GH[GitHub Actions - every ~15 min]
-        A[Analysis engine<br/>levels, FVG, SMAs, patterns] --> S[Strategies + confirmation gate]
+        A[Analysis engine<br/>levels, FVG, SMAs, regime] --> W[1h plan > 15m setup > 5m entry]
+        W --> S[13 strategies + confluence + risk check]
     end
     S --> D[GitHub Pages dashboard]
     S --> T[Telegram alert]
@@ -148,30 +155,48 @@ flowchart LR
 
 ## Strategies
 
-| Strategy | Idea | Where |
-|---|---|---|
-| **ICT sweep + FVG** | Liquidity sweep, displacement with market structure shift, limit entry at the fair value gap midpoint | Scalp 15m, Swing 4H |
-| **Trend pullback** | Trade with the higher-timeframe trend after a pullback to a level or moving average | Scalp, Swing |
-| **Daily Set & Forget** | Pin bar or engulfing candle at a swing level on the daily chart, wide stop, fixed target | Daily |
+| Family | Strategies |
+|---|---|
+| ICT / SMC | Sweep + FVG |
+| Trend | Trend pullback, EMA 20/60/100 cross |
+| Price action | Daily pin bar / engulfing, failed-breakout fade |
+| Breakout | Donchian, breakout + retest, Bollinger squeeze, NR7 |
+| Mean reversion | RSI(2), Bollinger range reversion |
+| Scalping | Asian range breakout (killzones) |
+| Swing | Heikin-Ashi + stochastic turn |
 
-> The Set & Forget rules here are **my interpretation**, not an official copy of anyone's system. Know the exact rules? [Open a strategy idea.](https://github.com/luciferalive/FX-Signal-Desk/issues/new?template=strategy_idea.md)
+Every rule, its source, what was vague in the sources and what was left out: **[guides/STRATEGIES.md](guides/STRATEGIES.md)**.
+List them in your terminal with `python -m fxbot strategies`.
 
-**The 9 confirmations:** trend, higher timeframe, SMAs, killzone, key level, FVG or order block, sweep or candle pattern, reward-to-risk of at least 2, premium / discount.
+> Some rules come from a PDF book, some from widely documented techniques, and the exact numbers are this project's choice. Several are **untested**. Run `backtest-history` before trusting any of them. The Set & Forget rules are **my interpretation**, not an official copy. Know the exact rules? [Open a strategy idea.](https://github.com/luciferalive/FX-Signal-Desk/issues/new?template=strategy_idea.md)
+
+**Choose your strategies:** in the dashboard use the strategy box, or create a `config.json` (see [`config.example.json`](config.example.json)):
+
+```json
+{
+  "strategies": { "enabled": ["trendpull", "retest", "donchian", "ict"] },
+  "risk": { "account": 5000, "risk_pct": 0.5, "min_rr": 2.0, "sessions": ["London KZ", "NY AM KZ"] },
+  "workflow": { "use_precision": false }
+}
+```
 
 | Timeframe | Signals | Analysis |
 |---|---|---|
-| 15m, 4H, 1D | Yes | Yes |
-| 1m, 5m, 30m, 1h, 1W, 1M | No | Yes (levels, zones, SMAs, patterns, trend) |
+| 15m (via the 1h > 15m > 5m workflow), 5m, 1m, 4H, 1D | Yes | Yes |
+| 30m, 1h, 1W, 1M | No | Yes (levels, zones, SMAs, patterns, trend) |
 
 ## Other commands
 
 ```bash
 pip install -r requirements.txt
+python -m fxbot strategies                        # list all strategies
+python -m fxbot workflow --symbol EURUSD          # 1h plan > 15m setup > 5m entry
 python -m fxbot analyze --symbol EURUSD --mode scalp
 python -m fxbot dashboard --demo --out demo       # offline demo with made-up prices
 python -m fxbot validate --symbol EURUSD --mode swing
 python -m fxbot validate --symbol EURUSD --mode scalp --csv eurusd_15m.csv
 python -m fxbot backtest --symbol EURUSD --strategy ict --mode swing
+python -m fxbot backtest --symbol EURUSD --strategy donchian --mode daily --split 0.7   # development vs evaluation
 python -m pytest -q
 ```
 
@@ -180,7 +205,10 @@ Free Yahoo data is limited (about 60 days of 15m, 2 years of 4H / daily). For lo
 ## Project layout
 
 ```
-fxbot/            analysis, zones, strategies, news, scanner, dashboard, backtest
+fxbot/            analysis, zones, news, scanner, dashboard, backtest
+fxbot/strategies/ the 13 strategies (one file per family)
+fxbot/workflow.py 1h > 15m > 5m decision;  regime.py, confluence.py, risk.py
+guides/           strategy reference
 fxbot/templates/  the dashboard page
 pine/             TradingView indicator
 tests/            pytest suite
@@ -203,6 +231,7 @@ Good first contributions:
 - [ ] Translations
 - [ ] Publish backtest results for each pair in the repo (honest numbers, committed with the code)
 - [ ] Prop-firm risk rules (daily loss limit, max drawdown) in alerts
+- [ ] Daily pivot level layer and more strategy rules from your favourite sources
 
 ## Help build this
 

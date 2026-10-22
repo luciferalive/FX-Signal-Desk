@@ -4,7 +4,8 @@ import argparse
 import os
 
 from . import DEFAULT_SYMBOLS
-from .backtest import format_report, run_backtest
+from .backtest import format_report, run_backtest, split_backtest
+from .config import load as load_config, spread_pips
 from .data import fetch, load_csv, resample, synthetic
 from .modes import MODES
 from .strategies import STRATEGIES
@@ -36,7 +37,18 @@ def cmd_backtest(a):
                 df = load_csv(a.csv, iv)
             else:
                 df = fetch(sym, iv)
-            res = run_backtest(df, strat.generate(df, sym), sym, risk_pct=a.risk, spread_pips=a.spread)
+            cfg = load_config()
+            spread = a.spread if a.spread is not None else spread_pips(cfg, sym)
+            kw = dict(risk_pct=a.risk, spread_pips=spread, slippage_pips=cfg["backtest"]["slippage_pips"],
+                      commission_pips=cfg["backtest"]["commission_pips"])
+            sigs = strat.generate(df, sym)
+            if a.split:
+                dev, ev, cut = split_backtest(df, sigs, sym, a.split, **kw)
+                print(format_report(dev, f"{sym} {name}/{mode} DEVELOPMENT (before {cut:%Y-%m-%d})"), "\n")
+                print(format_report(ev, f"{sym} {name}/{mode} EVALUATION (from {cut:%Y-%m-%d}, never tuned on)"), "\n")
+                summary.append((f"{sym} {name}/{mode} evaluation", ev.stats))
+                continue
+            res = run_backtest(df, sigs, sym, **kw)
             title = f"{sym} {name}/{mode} ({iv}, {len(df)} bars)"
             print(format_report(res, title), "\n")
             summary.append((title, res.stats))
@@ -64,7 +76,8 @@ def main():
         p.add_argument("--csv")
         p.add_argument("--synthetic", action="store_true")
         p.add_argument("--risk", type=float, default=1.0, help="%% equity risked per trade")
-        p.add_argument("--spread", type=float, default=1.0, help="spread in pips")
+        p.add_argument("--spread", type=float, default=None, help="spread in pips (default: typical for the pair, see config)")
+        p.add_argument("--split", type=float, default=0.0, help="e.g. 0.7: report the first 70%% (development) and last 30%% (evaluation) separately")
         p.add_argument("--no-chart", action="store_true")
 
     bt_args(sub.add_parser("backtest"))
@@ -87,7 +100,7 @@ def main():
     va.add_argument("--csv", help="15m (or finer) OHLC CSV in UTC, e.g. from Dukascopy")
     va.add_argument("--synthetic", action="store_true")
     va.add_argument("--step", type=int, default=3, help="bars between checks (keep <=3 for scalp)")
-    va.add_argument("--spread", type=float, default=1.0)
+    va.add_argument("--spread", type=float, default=None, help="spread in pips (default: typical for the pair, see config)")
     va.add_argument("--min-ratio", type=float, default=0.6, help="share of confirmations required (0.6 = 60%%)")
 
     db = sub.add_parser("dashboard", help="build the web dashboard into the docs folder")
@@ -95,6 +108,10 @@ def main():
     db.add_argument("--out", default="docs", help="output folder (index.html + data/*.json)")
     db.add_argument("--demo", action="store_true", help="made-up prices, labelled as demo, no internet needed")
 
+    sub.add_parser("strategies", help="list every strategy with its family, style and views")
+    wf = sub.add_parser("workflow", help="run the 1h plan -> 15m setup -> 5m execution check for one pair (live data)")
+    wf.add_argument("--symbol", default="EURUSD")
+    wf.add_argument("--synthetic", action="store_true")
     sub.add_parser("telegram-test", help="send a test message to your Telegram")
     wh = sub.add_parser("webhook")
     wh.add_argument("--port", type=int, default=int(os.getenv("PORT", 8080)))
@@ -127,7 +144,8 @@ def main():
             df = load_csv(a.csv, "15m")
         else:
             df = fetch(a.symbol, "15m" if a.mode == "scalp" else "1h")
-        res, _ = replay(df, a.symbol, a.mode, a.step, a.spread, a.min_ratio)
+        spread = a.spread if a.spread is not None else spread_pips(load_config(), a.symbol)
+        res, _ = replay(df, a.symbol, a.mode, a.step, spread, a.min_ratio)
         print(report(res, a.symbol, a.mode))
     elif a.cmd == "dashboard":
         from .dashboard import build, demo_frames
@@ -138,6 +156,26 @@ def main():
         else:
             path = build(a.symbols, out)
         print(f"dashboard -> {path}")
+    elif a.cmd == "strategies":
+        from .strategies import FAMILIES
+        for k, c in STRATEGIES.items():
+            d = c.describe()
+            print(f"{k:13} {FAMILIES.get(d['family'], d['family']):16} {d['style']:9} views={','.join(d['modes']):18} {d['label']}")
+    elif a.cmd == "workflow":
+        import json
+        from .data import load_frames
+        from .workflow import evaluate
+        if a.synthetic:
+            raw = synthetic("5m", days=200, step_min=5)
+            fr = {"5m": raw, "15m": resample(raw, "15m"), "1h": resample(raw, "1h")}
+        else:
+            fr = load_frames([a.symbol], ["5m", "15m", "1h"])[a.symbol]
+        r = evaluate(a.symbol, fr)
+        print(f"{r['state']}  (bias {r['bias']})")
+        for k, v in r["stages"].items():
+            print(f"  {k:8} {v['status']:5} {v['text']}")
+        if r["signal"]:
+            print(json.dumps(r["signal"], indent=2, default=str))
     elif a.cmd == "telegram-test":
         from .notify import telegram_test
         raise SystemExit(0 if telegram_test() else 1)

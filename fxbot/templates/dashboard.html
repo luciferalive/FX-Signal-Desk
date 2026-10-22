@@ -39,7 +39,8 @@ h1 { font-size: 19px; font-weight: 600; letter-spacing: -.01em; margin: 0; }
 .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
 .banner { background: var(--raise); border: 1px solid var(--warn); color: var(--warn); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-@media (max-width: 700px) { #pairs { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; } #pairs button { flex: none; } }
+@media (max-width: 700px) { #pairs, #tfs, #toggles { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; } #pairs button, #tfs button, #toggles button { flex: none; }
+  .tools > .chips { max-width: 100%; } }
 button { font: inherit; color: var(--muted); background: var(--surface); border: 1px solid var(--line); padding: 5px 11px; border-radius: 6px; cursor: pointer; }
 button:hover:not(:disabled) { color: var(--fg); }
 button:disabled { opacity: .4; cursor: default; }
@@ -86,7 +87,21 @@ td, th { padding: 5px 6px; text-align: left; border-bottom: 1px solid var(--line
 th { color: var(--muted); font-weight: 500; font-size: 11.5px; }
 td.n { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .up { color: var(--buy); } .dn { color: var(--sell); } .flat { color: var(--warn); }
+.tip { position: absolute; z-index: 5; max-width: 300px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 12.5px; box-shadow: 0 6px 20px rgba(0,0,0,.28); pointer-events: none; }
+.tip hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
+.tip .num { font-size: 12px; }
+.vb { display: inline-block; min-width: 64px; text-align: center; font: 600 11px var(--ui); letter-spacing: .05em; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted); }
+.vb.BUY { color: #fff; background: var(--buy); border-color: var(--buy); } .vb.SELL { color: #fff; background: var(--sell); border-color: var(--sell); }
+.vb.NT { color: var(--warn); border-color: var(--warn); }
+.srow { display: grid; grid-template-columns: 20px minmax(0, 1fr) 72px; gap: 4px 8px; align-items: start; padding: 7px 0; border-bottom: 1px solid var(--line); }
+.srow:last-child { border-bottom: 0; } .srow input { margin: 3px 0 0; accent-color: var(--accent); }
+.srow .why1 { grid-column: 2 / 4; color: var(--muted); font-size: 12px; }
+.fam { font-size: 11.5px; color: var(--muted); margin-left: 6px; }
+.wfrow { display: grid; grid-template-columns: 20px 92px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); align-items: start; }
+.wfrow:last-child { border-bottom: 0; } .wfrow span:last-child { color: var(--muted); font-size: 12.5px; }
+.wfi { font-weight: 700; } .wfrow.pass .wfi { color: var(--buy); } .wfrow.fail .wfi { color: var(--sell); } .wfrow.wait .wfi { color: var(--warn); }
 .pat { padding: 7px 0; border-bottom: 1px solid var(--line); } .pat:last-child { border-bottom: 0; }
+.hnote { margin-top: 6px; color: var(--warn); font-size: 12.5px; }
 @media (max-width: 560px) { .lv .v { font-size: 16px; } }
 [hidden] { display: none !important; }
 body { margin: 0; }
@@ -137,20 +152,23 @@ body { margin: 0; }
       </div>
       <div class="zoom" id="zoomBox"><button id="zout" aria-label="Zoom out">−</button><button id="zin" aria-label="Zoom in">+</button><button id="zfit">Fit</button></div>
     </div>
-    <div class="tools" id="toggleRow"><div class="chips" id="toggles" role="group" aria-label="Chart layers"></div></div>
+    <div class="tools" id="toggleRow"><div class="chips" id="toggles" role="group" aria-label="Chart layers"></div><button id="tglReset" title="Back to the clean default layers">Reset layers</button></div>
     <div class="chartbox" id="box">
       <canvas id="cv" role="img" aria-label="Price chart with signal, zones and levels"></canvas>
+      <div class="tip" id="tip" hidden></div>
     </div>
     <div class="livebox" id="live" hidden></div>
     <div class="sub fresh" id="fresh"></div>
     <details>
       <summary>How to read this chart</summary>
       <ul>
-        <li>Green and red boxes are unfilled fair value gaps. Dashed boxes are order blocks. They start where they formed and run right until price closes through them.</li>
-        <li>Amber lines are liquidity: previous day and week highs and lows, and the Asia range. Blue lines are London / New York session highs and lows. Teal lines are the daily, midnight and weekly opens.</li>
+        <li>Default view is deliberately clean: the current trade, the few zones closest to price, the main highs and lows, and the moving averages. Everything else is a toggle above the chart. Press Reset layers to come back.</li>
+        <li>Pale green and red boxes are the nearest unfilled fair value gaps and order blocks (overlapping ones are merged, at most four). Amber lines are the main liquidity levels: previous day and week highs and lows and the Asia range. Switch on Minor levels for session ranges, opens and swings.</li>
+        <li>A small arrow is a signal. Hover it (or tap it on a phone) to see entry, stop loss, targets, reward-to-risk and the reason. Several nearby signals are grouped into one arrow with a count. Switch on Past signals to see older ones.</li>
         <li>The dashed EQ line is the middle of the current swing range. Below it is discount (buys), above it is premium (sells).</li>
         <li>Coloured curves are the 50, 100 and 200 simple moving averages. Shaded vertical bands are the Asia, London and New York sessions.</li>
-        <li>The green and red box to the right of a signal is the trade: entry, stop loss, TP1 and TP2.</li>
+        <li>The blue line is the entry, the red area is the risk down to the stop, the green area is the reward up to TP1 and TP2.</li>
+        <li>1H plan levels shows the swing highs and lows the 1-hour plan uses (violet). Choose which strategies count with the Strategies box under the chart.</li>
         <li>Drag to move, scroll or pinch to zoom, press Fit to come back to the latest candles. Times are India time.</li>
         <li>The Analysis chart is a snapshot rebuilt every 15 minutes with all the overlays. Live price chart is TradingView's own live chart for the same pair and timeframe.</li>
         <li>A coloured dot on a pair or timeframe means the bot has a signal there (green buy, red sell, yellow if both).</li>
@@ -158,6 +176,10 @@ body { margin: 0; }
     </details>
   </div>
   <div class="card sig" id="signal"></div>
+  <div class="cols">
+    <div class="card"><h2 id="wfTitle">Multi-timeframe workflow</h2><div id="wf"></div></div>
+    <div class="card"><h2>Strategies</h2><div class="chips" id="fam" role="group" aria-label="Strategy group"></div><div class="scroll" id="strats" style="margin-top:6px"></div></div>
+  </div>
   <div class="cols">
     <div class="card"><h2>Trend, averages and range</h2><div id="trend"></div></div>
     <div class="card"><h2>Patterns</h2><div class="scroll" id="pats"></div></div>
@@ -174,17 +196,20 @@ body { margin: 0; }
 const INLINE = __INLINE__;   /* single-file demo data, or null when the data files are used */
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const TOGGLES = [['sessions','Sessions','--kz-lon'],['levels','Levels','--warn'],['fvg','FVG','--buy'],['ob','Order blocks','--accent'],
-  ['sma50','SMA 50','--c50'],['sma100','SMA 100','--c100'],['sma200','SMA 200','--c200'],['patterns','Patterns','--sell']];
-let on = { sessions: true, levels: true, fvg: true, ob: true, sma50: true, sma100: true, sma200: true, patterns: true };
-let IDX = null, NEWS = null, PD = null, TFS = {}, TFLIST = [], TF = null;
+const TOGGLES = [['signals','Signals','--buy'],['active','Active trade','--accent'],['history','Past signals','--muted'],['zones','ICT / SMC zones','--buy'],
+  ['levels','Support / resistance','--warn'],['trend','Trend (SMAs)','--c50'],['mtf','1H plan levels','--c100'],['sessions','Sessions','--kz-lon'],
+  ['patterns','Patterns','--sell'],['minor','Minor levels','--muted']];
+const ON_DEFAULT = { signals: true, active: true, history: false, zones: true, levels: true, trend: true, mtf: false, sessions: true, patterns: false, minor: false };
+let on = Object.assign({}, ON_DEFAULT), OFF = {};   /* OFF = strategies the user switched off */
+let IDX = null, NEWS = null, PD = null, TFS = {}, TFLIST = [], TF = null, SG = null, HIDDEN = null, HITS = [];
 let sym = null, tf = '15m', view = 'chart', themePref = 'auto';
 const CACHE = {};
 try {
-  const s = JSON.parse(localStorage.getItem('fxdesk3') || 'null');
-  if (s) { if (s.sym) sym = s.sym; if (s.tf) tf = s.tf; if (s.on) on = Object.assign(on, s.on); if (s.theme) themePref = s.theme; }
+  const s = JSON.parse(localStorage.getItem('fxdesk4') || 'null');
+  if (s) { if (s.sym) sym = s.sym; if (s.tf) tf = s.tf; if (s.on) on = Object.assign(on, s.on); if (s.theme) themePref = s.theme; if (s.off) OFF = s.off; }
 } catch (e) {}
-const save = () => { try { localStorage.setItem('fxdesk3', JSON.stringify({ sym, tf, on, theme: themePref })); } catch (e) {} };
+const save = () => { try { localStorage.setItem('fxdesk4', JSON.stringify({ sym, tf, on, theme: themePref, off: OFF })); } catch (e) {} };
+const selected = (k) => !k || !OFF[k];
 
 /* ---------- theme: auto follows the device, light and dark are forced ---------- */
 function applyTheme() {
@@ -244,11 +269,13 @@ function spreadLabels(items) {
   items.sort((a, b) => a.y - b.y);
   const placed = [];
   for (const it of items) {
+    const y0 = it.y;
     for (let k = 0; k < 20; k++) {
       const hit = placed.find((p) => Math.abs(p.y - it.y) < 13 && it.x < p.x + p.w && p.x < it.x + it.w);
       if (!hit) break;
       it.y = hit.y + 13;
     }
+    if (it.y - y0 > 40) { it.hide = true; continue; }   /* would sit far from its line: hide instead of mislabel */
     placed.push(it);
   }
 }
@@ -264,7 +291,7 @@ function pill(x, y, text, color, opts) {
 }
 
 function draw() {
-  raf = 0;
+  raf = 0; HITS = [];
   if (!M) return;
   const n = C.length, vis = plotW / barW, dec = AN.price_dec;
   const x = (i) => (i - start + 0.5) * barW;
@@ -272,7 +299,7 @@ function draw() {
   let lo = Infinity, hi = -Infinity;
   for (let i = i0; i <= i1; i++) { if (C[i][3] < lo) lo = C[i][3]; if (C[i][2] > hi) hi = C[i][2]; }
   if (!isFinite(lo)) { lo = C[n - 1][3]; hi = C[n - 1][2]; }
-  const sg = AN.signal;
+  const sg = on.active ? SG : null;
   if (sg && idxOf(sg.t) >= i0 - 5) for (const p of [sg.entry, sg.sl, sg.tp2]) { lo = Math.min(lo, p); hi = Math.max(hi, p); }
   const padP = (hi - lo) * 0.08 || hi * 0.001; lo -= padP; hi += padP;
   const y = (p) => (hi - p) / (hi - lo) * plotH;
@@ -293,7 +320,7 @@ function draw() {
   ctx.stroke();
 
   /* sessions */
-  if (on.sessions && TF.intraday) {
+  if (on.sessions && SESS_TF.includes(tf)) {
     let rs = -1, rn = null;
     const flush = (end) => {
       if (rn && T.kz[rn]) {
@@ -306,26 +333,41 @@ function draw() {
     flush(i1);
   }
 
-  /* zones: FVG and order blocks, from where they formed to the right edge */
-  const zones = (list, label, fillA, dashed) => {
-    for (const z of list) {
-      const xa = Math.max(x(idxOf(z.t)) - barW / 2, 0), yt = y(z.top), yb = y(z.bottom);
-      if (yb < 0 || yt > plotH) continue;
-      const col = z.side > 0 ? T.buy : T.sell;
-      ctx.fillStyle = alpha(col, fillA); ctx.fillRect(xa, yt, plotW - xa, Math.max(1, yb - yt));
-      ctx.strokeStyle = alpha(col, 0.75); ctx.lineWidth = 1; ctx.setLineDash(dashed ? [5, 3] : []);
-      ctx.strokeRect(xa + 0.5, yt + 0.5, plotW - xa, Math.max(1, yb - yt));
-      ctx.setLineDash([]);
-      ctx.font = T.ui; ctx.fillStyle = col; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-      if (yb - yt >= 12) ctx.fillText((z.side > 0 ? '▲ ' : '▼ ') + label + (z.status === 'tested' ? ' (tested)' : ''), xa + 4, yt + 2);
-    }
-  };
-  if (on.fvg) zones(AN.zones.fvgs, 'FVG', 0.16, false);
-  if (on.ob) zones(AN.zones.obs, 'OB', 0.12, true);
-
-  /* levels */
+  /* ICT / SMC zones: only the few nearest to price, overlapping ones merged, light fill */
   const labels = [];
-  if (on.levels) {
+  if (on.zones) {
+    const cand = [];
+    const pushZ = (list, kind) => { for (const z of list) { if (z.bottom > hi || z.top < lo) continue; cand.push({ side: z.side, top: z.top, bottom: z.bottom, t: z.t, kind, status: z.status, d: Math.abs((z.top + z.bottom) / 2 - AN.price) }); } };
+    pushZ(AN.zones.fvgs, 'FVG'); pushZ(AN.zones.obs, 'OB');
+    cand.sort((a, b) => a.d - b.d);
+    const keep = [];
+    for (const z of cand) {
+      const m = keep.find((k) => k.side === z.side && Math.min(k.top, z.top) - Math.max(k.bottom, z.bottom) > 0.5 * Math.min(k.top - k.bottom, z.top - z.bottom));
+      if (m) { m.top = Math.max(m.top, z.top); m.bottom = Math.min(m.bottom, z.bottom); m.t = Math.min(m.t, z.t); if (m.kind !== z.kind) m.kind = 'FVG/OB'; }
+      else if (keep.length < 4) keep.push(Object.assign({}, z));
+    }
+    keep.forEach((z, k) => {
+      const xa = Math.max(x(idxOf(z.t)) - barW / 2, 0), yt = y(z.top), yb = y(z.bottom);
+      const col = z.side > 0 ? T.buy : T.sell;
+      ctx.fillStyle = alpha(col, 0.09); ctx.fillRect(xa, yt, plotW - xa, Math.max(1, yb - yt));
+      ctx.strokeStyle = alpha(col, 0.5); ctx.lineWidth = 1; ctx.setLineDash(z.kind === 'OB' ? [5, 3] : []);
+      ctx.strokeRect(xa + 0.5, yt + 0.5, plotW - xa, Math.max(1, yb - yt)); ctx.setLineDash([]);
+      if (k < 2 && yb - yt >= 12) { ctx.font = T.ui; ctx.fillStyle = alpha(col, 0.95); ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillText((z.side > 0 ? '▲ ' : '▼ ') + z.kind, xa + 4, yt + 2); }
+    });
+    const R = AN.range;
+    if (R) {
+      const yy = Math.round(y(R.eq)) + 0.5;
+      if (yy > 0 && yy < plotH) {
+        const xa = Math.max(x(idxOf(R.t)) - barW / 2, 0);
+        ctx.strokeStyle = alpha(T.fg, 0.35); ctx.lineWidth = 1; ctx.setLineDash([8, 4]);
+        ctx.beginPath(); ctx.moveTo(xa, yy); ctx.lineTo(plotW, yy); ctx.stroke(); ctx.setLineDash([]);
+        labels.push({ x: Math.max(xa, 0) + 3, y: yy - 8, w: 70, text: narrow ? 'EQ' : 'EQ ' + R.zone, color: alpha(T.fg, 0.75) });
+      }
+    }
+  }
+
+  /* levels: the main ones by default (labels for the nearest 8), minor ones only when asked for */
+  if (on.levels || on.minor) {
     const line = (L, col, dash, w) => {
       const yy = Math.round(y(L.price)) + 0.5; if (yy < -2 || yy > plotH + 2) return;
       const xa = L.t ? Math.max(x(idxOf(L.t)) - barW / 2, 0) : 0;
@@ -334,32 +376,32 @@ function draw() {
       const txt = narrow ? L.name : L.name + ' ' + f(L.price);
       return { x: Math.max(xa, 0) + 3, y: yy - 8, w: (txt.length + 1) * 6.6, text: txt, color: col };
     };
-    for (const L of AN.levels) {
-      let col = T.warn, dash = [], w = 1.2;
-      if (L.kind === 'session') col = T.accent;
-      else if (L.kind === 'swing') { col = T.muted; dash = [2, 3]; w = 1; }
-      else if (L.kind === 'open') { col = T.open; dash = [6, 3]; }
-      else if (L.kind === 'day') { col = T.muted; dash = [1, 3]; w = 1; }
-      else if (L.kind === 'handle') { col = alpha(T.muted, 0.55); dash = [1, 4]; w = 1; }
-      if (L.kind === 'handle' && L.name === 'Half-handle') continue;
-      if (narrow && (L.kind === 'day' || L.kind === 'handle')) continue;
-      const lab = line(L, col, dash, w);
-      if (lab && L.kind !== 'handle') labels.push(lab);
-    }
-    const R = AN.range;
-    if (R) {
-      const yy = Math.round(y(R.eq)) + 0.5;
-      if (yy > 0 && yy < plotH) {
-        const xa = Math.max(x(idxOf(R.t)) - barW / 2, 0);
-        ctx.strokeStyle = alpha(T.fg, 0.45); ctx.lineWidth = 1; ctx.setLineDash([8, 4]);
-        ctx.beginPath(); ctx.moveTo(xa, yy); ctx.lineTo(plotW, yy); ctx.stroke(); ctx.setLineDash([]);
-        labels.push({ x: Math.max(xa, 0) + 3, y: yy - 8, w: 150, text: narrow ? 'EQ' : 'EQ ' + f(R.eq) + ' (' + R.zone + ' now)', color: alpha(T.fg, 0.8) });
+    const majors = [], minors = [];
+    for (const L of AN.levels) { if (L.kind === 'handle' && L.name === 'Half-handle') continue; (L.kind === 'liquidity' ? majors : minors).push(L); }
+    const near = (a, b) => Math.abs(a.dist_pips) - Math.abs(b.dist_pips);
+    if (on.levels) { let k = 0; for (const L of majors.sort(near)) { const lab = line(L, alpha(T.warn, 0.9), [], 1.2); if (lab && k < (narrow ? 4 : 8)) { labels.push(lab); k++; } } }
+    if (on.minor && !narrow) {
+      let k = 0;
+      for (const L of minors.sort(near)) {
+        const col = L.kind === 'session' ? T.accent : L.kind === 'open' ? T.open : T.muted;
+        const lab = line(L, alpha(col, 0.6), L.kind === 'open' ? [6, 3] : [2, 4], 1);
+        if (lab && L.kind !== 'handle' && k < 5) { labels.push(lab); k++; }
       }
     }
   }
 
+  /* 1H plan levels (multi-timeframe overlay) */
+  if (on.mtf && PD && PD.workflow && PD.workflow.plan && PD.workflow.plan.levels) {
+    for (const L of PD.workflow.plan.levels) {
+      const yy = Math.round(y(L.price)) + 0.5; if (yy < 0 || yy > plotH) continue;
+      if (L.zone) { ctx.fillStyle = alpha(T.c100, 0.06); ctx.fillRect(0, y(L.zone[1]), plotW, Math.max(1, y(L.zone[0]) - y(L.zone[1]))); }
+      ctx.strokeStyle = alpha(T.c100, 0.7); ctx.lineWidth = 1; ctx.setLineDash([7, 4]); ctx.beginPath(); ctx.moveTo(0, yy); ctx.lineTo(plotW, yy); ctx.stroke(); ctx.setLineDash([]);
+      labels.push({ x: 4, y: yy - 8, w: 60, text: '1H ' + (L.kind === 'support' ? 'support' : 'resist.'), color: T.c100 });
+    }
+  }
+
   /* moving averages */
-  const smaDefs = [['sma50', 'sma', '50', T.c50, 1.4], ['sma100', 'sma', '100', T.c100, 1.4], ['sma200', 'sma', '200', T.c200, 2]];
+  const smaDefs = [['trend', 'sma', '50', T.c50, 1.2], ['trend', 'sma', '100', T.c100, 1.2], ['trend', 'sma', '200', T.c200, 1.8]];
   const smaTags = [];
   for (const [key, , per, col, w] of smaDefs) {
     if (!on[key]) continue;
@@ -387,27 +429,56 @@ function draw() {
     ctx.fillRect(Math.round(xc - bw / 2), top, bw, Math.max(1, bot - top));
   }
 
-  /* the signal as a position box */
+  /* the active trade: blue entry, light red risk, light green reward */
   const rightLabels = [];
+  const itemOf = (h) => ({ side: h.side, label: h.label || h.strategy, entry: h.entry, sl: h.sl, tp: h.tp != null ? h.tp : h.tp2, rr: h.rr, reason: h.reason || (h.reasons && h.reasons[0]) || '', outcome: h.outcome || '' });
   if (sg) {
-    const si = idxOf(sg.t), xa = Math.max(x(si) - barW / 2, 0), long = sg.side === 'BUY';
+    const si = idxOf(sg.t), xa = Math.max(x(si) - barW / 2, 0);
     const yE = y(sg.entry), yS = y(sg.sl), yT1 = y(sg.tp1), yT2 = y(sg.tp2);
-    ctx.fillStyle = alpha(T.buy, 0.14); ctx.fillRect(xa, Math.min(yE, yT2), plotW - xa, Math.abs(yT2 - yE));
-    ctx.fillStyle = alpha(T.sell, 0.14); ctx.fillRect(xa, Math.min(yE, yS), plotW - xa, Math.abs(yS - yE));
+    ctx.fillStyle = alpha(T.buy, 0.07); ctx.fillRect(xa, Math.min(yE, yT2), plotW - xa, Math.abs(yT2 - yE));
+    ctx.fillStyle = alpha(T.sell, 0.08); ctx.fillRect(xa, Math.min(yE, yS), plotW - xa, Math.abs(yS - yE));
+    const band = Math.max(3, Math.abs(yS - yE) * 0.1), dirY = sg.side === 'BUY' ? -1 : 1;
+    ctx.fillStyle = alpha(T.accent, 0.16); ctx.fillRect(xa, Math.min(yE, yE + dirY * band), plotW - xa, band);
     const ln = (yy, col, dash, w) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.setLineDash(dash); ctx.beginPath(); ctx.moveTo(xa, Math.round(yy) + 0.5); ctx.lineTo(plotW, Math.round(yy) + 0.5); ctx.stroke(); ctx.setLineDash([]); };
-    ln(yE, T.accent, [], 1.6); ln(yS, T.sell, [], 1.6); ln(yT1, T.buy, [5, 3], 1.2); ln(yT2, T.buy, [], 1.6);
+    ln(yE, T.accent, [], 1.5); ln(yS, T.sell, [], 1.4); ln(yT1, alpha(T.buy, 0.8), [5, 3], 1); ln(yT2, T.buy, [], 1.4);
     const rp = (txt, yy, col) => rightLabels.push({ x: plotW - 4 - (txt.length + 1) * 6.6, y: yy, w: (txt.length + 1) * 6.6, text: txt, color: col, right: true, border: true });
     rp((compact ? 'ENTRY' : 'ENTRY ' + f(sg.entry)), yE, T.accent);
     rp((compact ? 'SL' : 'SL ' + f(sg.sl) + ' · ' + sg.risk_pips + 'p'), yS, T.sell);
     rp((compact ? 'TP1' : 'TP1 ' + f(sg.tp1)), yT1, T.buy);
     rp((compact ? 'TP2' : 'TP2 ' + f(sg.tp2) + ' · RR ' + Number(sg.rr).toFixed(1)), yT2, T.buy);
-    /* arrow on the signal candle */
-    const sx = x(si), sy = long ? y(C[si][3]) + 14 : y(C[si][2]) - 14;
-    ctx.fillStyle = long ? T.buy : T.sell; ctx.beginPath();
-    if (long) { ctx.moveTo(sx, sy - 7); ctx.lineTo(sx - 6, sy + 5); ctx.lineTo(sx + 6, sy + 5); } else { ctx.moveTo(sx, sy + 7); ctx.lineTo(sx - 6, sy - 5); ctx.lineTo(sx + 6, sy - 5); }
+  }
+  /* markers: one small arrow per signal, nearby ones grouped, details on hover or tap */
+  const arrow = (px, py, up, col, size, ring) => {
+    ctx.fillStyle = col; ctx.beginPath();
+    if (up) { ctx.moveTo(px, py - size); ctx.lineTo(px - size, py + size * 0.7); ctx.lineTo(px + size, py + size * 0.7); } else { ctx.moveTo(px, py + size); ctx.lineTo(px - size, py - size * 0.7); ctx.lineTo(px + size, py - size * 0.7); }
     ctx.closePath(); ctx.fill();
-    ctx.font = '600 11px ' + T.mono.split(' ').slice(1).join(' '); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(sg.side, sx, long ? sy + 17 : sy - 17);
+    if (ring) { ctx.strokeStyle = ring; ctx.lineWidth = 1.5; ctx.stroke(); }
+  };
+  if (SG && on.signals) {
+    const si = idxOf(SG.t);
+    if (si >= i0 && si <= i1) {
+      const up = SG.side === 'BUY', sx = x(si), sy = up ? y(C[si][3]) + 14 : y(C[si][2]) - 14;
+      arrow(sx, sy, up, up ? T.buy : T.sell, 7, T.fg);
+      HITS.push({ x: sx, y: sy, r: 14, items: [itemOf(Object.assign({ label: SG.strategy }, SG))] });
+    }
+  }
+  if (on.signals || on.history) {
+    const recentT = TS[Math.max(0, n - 4)];
+    const list = (AN.history || []).filter((h) => selected(h.key) && !(SG && h.key === SG.key && h.t === SG.t));
+    const cl = [];
+    for (const h of list) {
+      const i = idxOf(h.t); if (i < i0 || i > i1) continue;
+      if (h.t >= recentT ? !on.signals : !on.history) continue;
+      const px = x(i), c = cl.find((q) => q.side === h.side && Math.abs(q.px - px) < 14);
+      if (c) c.items.push(h); else cl.push({ side: h.side, px, i, items: [h] });
+    }
+    for (const c of cl) {
+      const up = c.side === 'BUY', py = up ? y(C[c.i][3]) + 11 : y(C[c.i][2]) - 11;
+      const last = c.items[c.items.length - 1], ring = last.outcome === 'TP' ? T.buy : last.outcome === 'SL' ? T.sell : null;
+      arrow(c.px, py, up, alpha(up ? T.buy : T.sell, 0.6), 4.5, ring ? alpha(ring, 0.9) : null);
+      if (c.items.length > 1) { ctx.font = T.ui; ctx.fillStyle = T.muted; ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText('×' + c.items.length, c.px + 6, py + (up ? 2 : -2)); }
+      HITS.push({ x: c.px, y: py, r: 11, items: c.items.map(itemOf) });
+    }
   }
 
   /* pattern markers */
@@ -431,9 +502,9 @@ function draw() {
 
   /* labels last, nudged apart so none overlap */
   spreadLabels(labels); spreadLabels(rightLabels.concat(smaTags));
-  for (const l of labels) pill(l.x, l.y, l.text, l.color);
-  for (const l of rightLabels) pill(l.x + l.w, l.y, l.text, l.color, { right: true, border: true });
-  for (const l of smaTags) if (!rightLabels.some((r) => Math.abs(r.y - l.y) < 12)) pill(l.x, l.y, l.text, l.color);
+  for (const l of labels) if (!l.hide) pill(l.x, l.y, l.text, l.color);
+  for (const l of rightLabels) if (!l.hide) pill(l.x + l.w, l.y, l.text, l.color, { right: true, border: true });
+  for (const l of smaTags) if (!l.hide && !rightLabels.some((r) => Math.abs(r.y - l.y) < 12)) pill(l.x, l.y, l.text, l.color);
 
   ctx.restore();
 
@@ -487,6 +558,23 @@ function draw() {
   if (showOHLC) { ctx.fillStyle = T.muted; ctx.font = T.mono; ctx.fillText(head2, 10, 24); }
 }
 
+/* ---------- hover / tap details for signal markers ---------- */
+function showTip(px, py) {
+  const tip = $('#tip'); if (!tip || !AN) return;
+  let best = null, bd = 1e9;
+  for (const h of HITS) { const d = Math.hypot(h.x - px, h.y - py); if (d <= h.r && d < bd) { best = h; bd = d; } }
+  if (!best) { tip.hidden = true; return; }
+  const f = (v) => v == null ? '-' : Number(v).toFixed(AN.price_dec);
+  tip.innerHTML = best.items.slice(0, 4).map((it) => `<div><b class="${it.side === 'BUY' ? 'up' : 'dn'}">${it.side}</b> ${esc(it.label)}` +
+    `<div class="num">Entry ${f(it.entry)} · SL ${f(it.sl)} · TP ${f(it.tp)}${it.rr ? ' · RR ' + Number(it.rr).toFixed(1) : ''}</div>` +
+    (it.reason ? `<div class="note">${esc(it.reason)}</div>` : '') +
+    (it.outcome ? `<div class="note">Result so far: ${it.outcome === 'TP' ? 'reached target' : it.outcome === 'SL' ? 'stopped out' : it.outcome === 'unfilled' ? 'limit never filled' : 'still open'}</div>` : '') + '</div>').join('<hr>') +
+    (best.items.length > 4 ? `<div class="note">+${best.items.length - 4} more nearby</div>` : '');
+  tip.hidden = false;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = clamp(px + 14, 4, Math.max(4, W - w - 4)) + 'px'; tip.style.top = clamp(py - h - 8 > 4 ? py - h - 8 : py + 16, 4, Math.max(4, H - h - 4)) + 'px';
+}
+
 /* ---------- interaction ---------- */
 const ptrs = new Map(); let drag = null, pinch = null, moved = false;
 cv.addEventListener('pointerdown', (e) => {
@@ -505,16 +593,16 @@ cv.addEventListener('pointermove', (e) => {
     const dx = e.clientX - drag.x; if (Math.abs(dx) > 3) moved = true;
     start = drag.start - dx / barW; clampView();
   }
-  if (e.pointerType === 'mouse') cross = { x: e.clientX - r.left, y: e.clientY - r.top };
+  if (e.pointerType === 'mouse') { cross = { x: e.clientX - r.left, y: e.clientY - r.top }; if (!drag || ptrs.size !== 1 || !moved) showTip(cross.x, cross.y); else $('#tip').hidden = true; }
   schedule();
 });
 const release = (e) => {
-  if (!moved && e.pointerType === 'touch') { const r = cv.getBoundingClientRect(); cross = { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  if (!moved && e.pointerType === 'touch') { const r = cv.getBoundingClientRect(); cross = { x: e.clientX - r.left, y: e.clientY - r.top }; showTip(cross.x, cross.y); }
   ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
   drag = ptrs.size === 1 ? { x: [...ptrs.values()][0].x, start } : null; schedule();
 };
 cv.addEventListener('pointerup', release); cv.addEventListener('pointercancel', release);
-cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') { cross = null; schedule(); } });
+cv.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') { cross = null; $('#tip').hidden = true; schedule(); } });
 cv.addEventListener('wheel', (e) => {
   e.preventDefault();
   if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) { start += e.deltaX / barW; clampView(); schedule(); return; }
@@ -526,8 +614,25 @@ $('#zin').addEventListener('click', () => zoomBy(1.3)); $('#zout').addEventListe
 $('#zfit').addEventListener('click', () => { fit(); schedule(); });
 
 /* ---------- panels ---------- */
+/* The signal shown for a timeframe. 15m / 5m / 1m use the 1H -> 15m -> 5m workflow (the same one that sends Telegram alerts);
+   4H and 1D use the analysis signal. A signal from a strategy you switched off is hidden. */
+const WFTF = ['1m', '5m', '15m'];
+const SESS_TF = ['1m', '5m', '15m', '30m'];   /* session shading only makes sense on short timeframes */
+function fromWF(w) {
+  return { side: w.direction, entry: w.entry, sl: w.stop_loss, tp1: w.take_profit[0], tp2: w.take_profit[1], rr: w.risk_reward, risk_pips: w.risk_pips,
+    t: w.t, key: w.strategy_key, strategy: w.strategy, wf: true, reasons: w.explanation };
+}
+function pickSignal(k) {
+  const m = PD.tfs[k]; if (!m) return { sg: null, hidden: null };
+  let raw = null;
+  if (WFTF.includes(k)) raw = PD.workflow && PD.workflow.signal ? fromWF(PD.workflow.signal) : null;
+  else raw = m.an.signal;
+  if (raw && !selected(raw.key)) return { sg: null, hidden: raw };
+  return { sg: raw, hidden: null };
+}
 function setData() {
   TF = TFS[tf]; M = PD.tfs[tf]; AN = M.an; C = M.candles; TS = C.map((c) => c[0]);
+  const r = pickSignal(tf); SG = r.sg; HIDDEN = r.hidden;
 }
 function renderChips() {
   const dot = (p) => { const sides = Object.values(p.sig || {}).map((x) => x.side); if (!sides.length) return ''; const bu = sides.includes('BUY'), se = sides.includes('SELL'); return `<i class="dot ${bu && se ? 'mix' : bu ? 'buy' : 'sell'}"></i>`; };
@@ -539,15 +644,29 @@ function renderChips() {
     : '<span class="note">None right now. The bot checks every 15 minutes.</span>');
 }
 function renderPanels() {
-  const an = AN, d = an.price_dec, f = (x) => Number(x).toFixed(d), s = an.signal;
+  const an = AN, d = an.price_dec, f = (x) => Number(x).toFixed(d), s = SG;
   renderChips();
-  $('#tfs').innerHTML = TFLIST.map((t) => { const has = PD.tfs[t.key], sg = has && PD.tfs[t.key].an.signal;
+  renderWorkflow(); renderStrategies();
+  $('#tfs').innerHTML = TFLIST.map((t) => { const has = PD.tfs[t.key], sg = has && pickSignal(t.key).sg;
     return `<button data-t="${t.key}" aria-pressed="${t.key === tf}" ${has ? '' : 'disabled'}>${esc(t.label)}${sg ? `<i class="dot ${sg.side === 'BUY' ? 'buy' : 'sell'}"></i>` : ''}</button>`; }).join('');
-  $('#toggles').innerHTML = TOGGLES.filter((t) => !(!TF.intraday && t[0] === 'sessions')).map(([k, label, tok]) =>
+  $('#toggles').innerHTML = TOGGLES.filter((t) => !(!SESS_TF.includes(tf) && t[0] === 'sessions') && !(t[0] === 'mtf' && !(PD.workflow && PD.workflow.plan && PD.workflow.plan.levels))).map(([k, label, tok]) =>
     `<button class="tg" data-k="${k}" aria-pressed="${on[k]}"><i style="background:var(${tok})"></i>${label}</button>`).join('');
 
   const pips = (a, b) => (Math.abs(a - b) / (d === 3 ? 0.01 : d === 2 ? 0.1 : 0.0001)).toFixed(1);
-  if (s) {
+  if (s && s.wf) {
+    const w = PD.workflow.signal, dirc = s.side === 'BUY' ? 'buy' : 'sell';
+    $('#signal').innerHTML = `
+      <div class="sig-head"><span class="badge ${dirc}">${s.side}</span><strong>${esc(an.symbol)}</strong><span class="pill">${esc(w.strategy)}</span>
+        <span class="pill">${esc(w.timeframe)}</span><span class="pill" title="${esc(w.confidence_note)}">Confluence score ${w.confidence}/100</span><span class="pill">Regime: ${esc(w.regime)}</span></div>
+      <div class="levels4">
+        <div class="lv"><div class="k">Entry</div><div class="v">${f(w.entry)}</div><div class="p">zone ${f(w.entry_zone[0])} – ${f(w.entry_zone[1])}</div></div>
+        <div class="lv sl"><div class="k">Stop loss</div><div class="v">${f(w.stop_loss)}</div><div class="p">${w.risk_pips} pips</div></div>
+        <div class="lv tp"><div class="k">TP1 (1R)</div><div class="v">${f(w.take_profit[0])}</div><div class="p">${pips(w.take_profit[0], w.entry)} pips</div></div>
+        <div class="lv tp"><div class="k">TP2</div><div class="v">${f(w.take_profit[1])}</div><div class="p">${pips(w.take_profit[1], w.entry)} pips · RR ${Number(w.risk_reward).toFixed(1)}</div></div>
+      </div>
+      <div><h2>Why this trade</h2><ul class="why">${w.explanation.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>
+      <div class="note">Invalid if: ${esc(w.invalidation)}. Size for ${w.position.risk_amount} risk: about ${w.position.lots} lots${w.position.exact ? '' : ' (approximate, check your broker calculator)'}. The score shows how much independent evidence lines up, it is not a win chance.</div>`;
+  } else if (s) {
     $('#signal').innerHTML = `
       <div class="sig-head"><span class="badge ${s.side === 'BUY' ? 'buy' : 'sell'}">${s.side}</span>
         <strong>${esc(an.symbol)}</strong><span class="pill">${esc(s.strategy)}</span><span class="pill">${esc(TF.label)}</span>
@@ -560,11 +679,13 @@ function renderPanels() {
       </div>
       <div><h2>Confirmations</h2><div class="checks">${s.checks.passed.map((x) => `<span class="ck ok">${esc(x)}</span>`).join('')}${s.checks.missing.map((x) => `<span class="ck no">${esc(x)}</span>`).join('')}</div></div>
       <div><h2>Why this trade</h2><ul class="why">${s.reasons.map((r) => `<li>${esc(r)}</li>`).join('')}</ul></div>
-      <div class="note">${esc(s.manage)} ${esc(s.cancel)}.</div>`;
+      <div class="note">${esc(s.manage)} ${esc(s.cancel)}.</div>${s.invalidation ? `<div class="note">Invalid if: ${esc(s.invalidation)}.</div>` : ''}`;
   } else {
-    const capable = TF.signals;
+    const capable = TF.signals, wf = PD.workflow, st = WFTF.includes(tf) && wf ? wf.state : null;
     $('#signal').innerHTML = `
-      <div class="sig-head"><span class="badge none">${capable ? 'NO TRADE' : 'ANALYSIS ONLY'}</span><strong>${esc(an.symbol)}</strong><span class="pill">${esc(TF.label)}</span></div>
+      <div class="sig-head"><span class="badge none">${capable ? (st && st !== 'BUY' && st !== 'SELL' ? st : 'NO TRADE') : 'ANALYSIS ONLY'}</span><strong>${esc(an.symbol)}</strong><span class="pill">${esc(TF.label)}</span></div>
+      ${HIDDEN ? `<div class="hnote">A ${esc(HIDDEN.side)} signal exists from ${esc(HIDDEN.strategy)}, but you switched that strategy off.</div>` : ''}
+      ${st && wf.reasons && wf.reasons.length ? `<div class="note">${esc(wf.reasons[wf.reasons.length - 1])}</div>` : ''}
       ${capable ? '' : `<div class="note">Trade signals are produced on the 15m, 4H and 1D charts, the timeframes the rules were built and tested on. This ${esc(TF.label)} chart still shows the levels, zones, averages and patterns for context.</div>`}
       <div><h2>${capable ? 'Wait for' : 'What to watch'}</h2><ul class="why">${(an.watch.length ? an.watch : ['No clean setup yet. Waiting for a sweep of a key level with displacement.']).map((w) => `<li>${esc(w)}</li>`).join('')}</ul></div>`;
   }
@@ -581,6 +702,30 @@ function renderPanels() {
     <div class="kv"><span>ATR</span><span class="num">${an.atr_pips} pips</span></div>`;
   $('#levels').innerHTML = `<table><thead><tr><th>Level</th><th style="text-align:right">Price</th><th style="text-align:right">Pips</th></tr></thead><tbody>${an.levels.filter((l) => l.kind !== 'handle').slice(0, 18).map((l) => `<tr><td>${esc(l.name)}</td><td class="n">${f(l.price)}</td><td class="n ${l.dist_pips > 0 ? 'dn' : 'up'}">${(l.dist_pips > 0 ? '+' : '') + l.dist_pips.toFixed(1)}</td></tr>`).join('')}</tbody></table>`;
   $('#pats').innerHTML = an.patterns.length ? an.patterns.map((p) => `<div class="pat"><b class="${p.side > 0 ? 'up' : p.side < 0 ? 'dn' : 'flat'}">${p.side > 0 ? 'Bullish' : p.side < 0 ? 'Bearish' : 'Neutral'}</b> ${esc(p.name)} <span class="pill">${esc(p.status)}</span><div class="note">${esc(p.note)}</div></div>`).join('') : '<div class="note">No patterns on the latest candles.</div>';
+}
+
+/* ---------- workflow card and strategy selector ---------- */
+function renderWorkflow() {
+  const w = PD.workflow, box = $('#wf'), wf = IDX.workflow || {};
+  $('#wfTitle').textContent = 'Workflow · ' + (wf.plan || '1h') + ' plan → ' + (wf.setup || '15m') + ' setup → ' + (wf.execute || '5m') + ' entry';
+  if (!w) { box.innerHTML = '<div class="note">No workflow result for this pair (not enough candles on the 1h, 15m or 5m).</div>'; return; }
+  const ic = { pass: '✓', wait: '…', fail: '✕' };
+  const order = [['news', 'News'], ['plan', (wf.plan || '1h') + ' plan'], ['setup', (wf.setup || '15m') + ' setup'], ['trigger', (wf.execute || '5m') + ' entry'], ['risk', 'Risk check']];
+  const cls = w.state === 'BUY' ? 'BUY' : w.state === 'SELL' ? 'SELL' : 'NT';
+  box.innerHTML = `<div style="margin-bottom:6px"><span class="vb ${cls}">${esc(w.state)}</span> <span class="note">${w.state === 'WAIT' ? 'Waiting is a valid answer: the engine does not force trades.' : w.state === 'NO TRADE' ? 'Standing aside.' : ''}</span></div>` +
+    order.filter(([k]) => w.stages[k]).map(([k, l]) => `<div class="wfrow ${w.stages[k].status}"><span class="wfi">${ic[w.stages[k].status] || '·'}</span><b>${esc(l)}</b><span>${esc(w.stages[k].text)}</span></div>`).join('') +
+    (w.rejected && w.rejected.length ? `<details><summary>Rejected ideas (${w.rejected.length})</summary><ul>${w.rejected.slice(0, 8).map((r) => `<li>${esc(r)}</li>`).join('')}</ul></details>` : '');
+}
+function renderStrategies() {
+  const all = IDX.strategies || [], fams = IDX.families || {}, rows = AN.strategies || [];
+  const onKeys = all.filter((x) => selected(x.key)).map((x) => x.key);
+  const famOn = (f) => { const ks = all.filter((x) => f === 'all' || x.family === f).map((x) => x.key); return ks.length && ks.every((k) => onKeys.includes(k)) && onKeys.length === ks.length; };
+  $('#fam').innerHTML = [['all', 'All (multi-strategy)']].concat(Object.entries(fams)).map(([k, l]) => `<button data-f="${k}" aria-pressed="${famOn(k)}">${esc(l)}</button>`).join('');
+  const byKey = Object.fromEntries(rows.map((r) => [r.key, r]));
+  const list = all.filter((x) => (x.modes || []).includes(TF.mode));
+  $('#strats').innerHTML = !TF.mode ? '<div class="note">Strategies produce signals on the 15m, 4H and 1D charts. This timeframe is analysis only.</div>' :
+    list.map((x) => { const r = byKey[x.key] || { verdict: 'WAIT', reason: 'no data' }, v = r.verdict === 'NO TRADE' ? 'NT' : r.verdict;
+      return `<div class="srow"><input type="checkbox" data-k="${esc(x.key)}" ${selected(x.key) ? 'checked' : ''} aria-label="Use ${esc(x.label)}"><div><b>${esc(x.label)}</b><span class="fam">${esc(fams[x.family] || x.family)}</span></div><span class="vb ${v}">${esc(r.verdict)}</span><div class="why1">${esc(selected(x.key) ? r.reason : 'switched off')}</div></div>`; }).join('');
 }
 
 /* ---------- fundamental news (red = high, yellow = medium, green = low impact) ---------- */
@@ -676,6 +821,10 @@ $('#pairs').addEventListener('click', (e) => { const b = e.target.closest('butto
 $('#board').addEventListener('click', (e) => { const b = e.target.closest('button[data-s]'); if (b) { tf = b.dataset.t || tf; selectPair(b.dataset.s, true); } });
 $('#tfs').addEventListener('click', (e) => { const b = e.target.closest('button[data-t]'); if (b && !b.disabled) { tf = b.dataset.t; render(true); } });
 $('#views').addEventListener('click', (e) => { const b = e.target.closest('button[data-v]'); if (b) setView(b.dataset.v); });
+$('#tglReset').addEventListener('click', () => { on = Object.assign({}, ON_DEFAULT); save(); render(false); });
+$('#fam').addEventListener('click', (e) => { const b = e.target.closest('button[data-f]'); if (!b) return; const f = b.dataset.f;
+  OFF = {}; for (const x of IDX.strategies) if (f !== 'all' && x.family !== f) OFF[x.key] = true; save(); render(false); });
+$('#strats').addEventListener('change', (e) => { const k = e.target.dataset && e.target.dataset.k; if (!k) return; if (e.target.checked) delete OFF[k]; else OFF[k] = true; save(); render(false); });
 $('#toggles').addEventListener('click', (e) => { const b = e.target.closest('button[data-k]'); if (b) { on[b.dataset.k] = !on[b.dataset.k]; b.setAttribute('aria-pressed', on[b.dataset.k]); save(); schedule(); } });
 $('#themeBtn').addEventListener('click', () => { themePref = { auto: 'light', light: 'dark', dark: 'auto' }[themePref]; applyTheme(); save(); });
 try { new ResizeObserver(() => { layout(); clampView(); schedule(); }).observe($('#box')); } catch (e) { window.addEventListener('resize', () => { layout(); clampView(); schedule(); }); }

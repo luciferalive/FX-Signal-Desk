@@ -9,11 +9,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .backtest import pip_size
+from .backtest import pip_size, trade_outcome
 from .indicators import atr, ema, pivot_idx
+from .config import load as load_config, enabled_strategies
 from .modes import MODES
+from .regime import current_regime
+from .risk import dedupe, invalidated, validate
 from .sessions import IST, NY, day_levels, session_labels, silver_bullet_now, window_mask
-from .strategies import STRATEGIES
+from .strategies import FAMILIES, STRATEGIES
 from .zones import dealing_range, find_fvgs, find_obs, open_levels, sma_values
 
 HIGH_PROB_SESSIONS = ("London KZ", "NY AM KZ")
@@ -289,15 +292,21 @@ def detect_patterns(df: pd.DataFrame, levels: list[dict], n: int = 3) -> list[di
 
 
 # ---------------------------------------------------------------- signal composer
-def _fresh_strategy_signals(df, symbol, mode, lookback=3):
-    h, l = df["high"].to_numpy(), df["low"].to_numpy()
-    last = len(df) - 1
+WINDOW = 1500  # newest bars given to the strategies (all need far less warm-up than this)
+
+
+def _fresh_strategy_signals(df, symbol, mode, lookback=3, enabled=None):
+    """Signals from the last `lookback` closed bars that are still valid, from every enabled strategy."""
+    d = df.iloc[-WINDOW:]
+    h, l = d["high"].to_numpy(), d["low"].to_numpy()
+    last = len(d) - 1
     out = []
-    for cls in STRATEGIES.values():
+    for name in enabled or list(STRATEGIES):
+        cls = STRATEGIES[name]
         if mode not in cls.PRESETS:
             continue
         st = cls(mode)
-        for s in st.generate(df, symbol):
+        for s in st.generate(d, symbol):
             if s.idx < last - lookback + 1:
                 continue
             seg_h, seg_l = h[s.idx + 1: last + 1], l[s.idx + 1: last + 1]
@@ -308,6 +317,42 @@ def _fresh_strategy_signals(df, symbol, mode, lookback=3):
             filled = s.entry_type == "limit" and ((seg_l <= s.entry).any() if s.side == 1 else (seg_h >= s.entry).any())
             out.append((s, "active (limit already touched)" if filled else "pending limit" if s.entry_type == "limit" else "market"))
     return out
+
+
+def strategy_report(df, symbol, mode, cfg, enabled=None, visible=400, dec=5):
+    """Per-strategy verdicts for the newest candles plus the recent signal history (for chart markers).
+    verdict: BUY / SELL = a valid fresh signal, WAIT = nothing on the latest candles, NO TRADE = regime says stand aside."""
+    d = df.iloc[-WINDOW:]
+    last = len(d) - 1
+    reg = current_regime(d)
+    rows, hist = [], []
+    for name in enabled or list(STRATEGIES):
+        cls = STRATEGIES[name]
+        if mode not in cls.PRESETS:
+            continue
+        try:
+            sigs = dedupe(cls(mode).generate(d, symbol), cfg["risk"]["dedupe_bars"])
+        except Exception as e:
+            rows.append(dict(key=name, label=cls.label, family=cls.family, verdict="WAIT", reason=f"error: {type(e).__name__}"))
+            continue
+        fresh = [s for s in sigs if s.idx >= last - 2 and not invalidated(s, d)]
+        row = dict(key=name, label=cls.label, family=cls.family, style=cls.style, summary=cls.summary)
+        if fresh:
+            s = fresh[-1]
+            row.update(verdict=s.direction, reason=s.reason, entry=round(s.entry, dec), sl=round(s.sl, dec),
+                       tp=round(s.tp, dec), rr=s.rr, invalidation=s.invalidation)
+        elif reg["label"] == "volatile":
+            row.update(verdict="NO TRADE", reason="volatility is far above normal, stand aside")
+        else:
+            row.update(verdict="WAIT", reason="no valid setup on the latest candles")
+        rows.append(row)
+        for s in sigs:
+            if s.idx >= len(d) - visible:
+                hist.append(dict(time=pd.Timestamp(s.time).isoformat(), side=s.direction, key=name, label=cls.label,
+                                 family=cls.family, entry=round(s.entry, dec), sl=round(s.sl, dec), tp=round(s.tp, dec),
+                                 rr=s.rr, reason=s.reason, outcome=trade_outcome(d, s)))
+    hist.sort(key=lambda x: x["time"])
+    return rows, hist, reg
 
 
 def _sma_agrees(smas: dict, price: float, side: int) -> bool:
@@ -321,11 +366,13 @@ def _sma_agrees(smas: dict, price: float, side: int) -> bool:
 
 def analyze(symbol: str, mode: str, df: pd.DataFrame, df_htf: pd.DataFrame | None = None, htf_name: str = "",
             strict: bool = True, min_ratio: float = 0.6, *, interval: str | None = None,
-            signals: bool = True, intraday: bool | None = None) -> dict:
+            signals: bool = True, intraday: bool | None = None, cfg: dict | None = None, detail: bool = True) -> dict:
     """mode: the tuned view ('scalp' / 'swing' / 'daily') or 'view' for analysis-only timeframes.
     signals=False gives levels, zones, averages, patterns and trend but never a trade signal."""
     pip = pip_size(symbol)
     dec = 3 if pip == 0.01 else 2 if pip == 0.1 else 5
+    cfg = cfg or load_config()
+    enabled = enabled_strategies(cfg)
     interval = interval or MODES[mode]["interval"]
     if intraday is None:
         intraday = mode != "daily"
@@ -348,10 +395,10 @@ def analyze(symbol: str, mode: str, df: pd.DataFrame, df_htf: pd.DataFrame | Non
     smas = sma_values(df)
 
     cands = []
-    for s, status in (_fresh_strategy_signals(df, symbol, mode) if signals else []):
+    for s, status in (_fresh_strategy_signals(df, symbol, mode, enabled=enabled) if signals else []):
         cands.append(dict(side=s.side, entry=s.entry, sl=s.sl, tp=s.tp, rr=s.rr, entry_type=s.entry_type,
-                          status=status, strategy=f"{s.strategy.upper()} {mode}", why=s.reason, expiry=s.expiry,
-                          time=s.time.isoformat()))
+                          status=status, strategy=f"{STRATEGIES[s.strategy].label} ({mode})", why=s.reason, expiry=s.expiry,
+                          time=s.time.isoformat(), family=s.family, key=s.strategy, invalidation=s.invalidation))
     for p in (pats if signals else []):
         if p["side"] and p["status"] == "confirmed" and p.get("brk_recent") and "target" in p:
             risk = abs(price - p["sl"])
@@ -360,13 +407,19 @@ def analyze(symbol: str, mode: str, df: pd.DataFrame, df_htf: pd.DataFrame | Non
                 cands.append(dict(side=p["side"], entry=price, sl=p["sl"], tp=p["target"], rr=round(reward / risk, 2),
                                   entry_type="market", status="market (pattern breakout)",
                                   strategy=f"Pattern: {p['name']}", why=f"{p['name']} broke its neckline", expiry=0,
-                                  time=p["time"]))
+                                  time=p["time"], family="price_action", key="pattern"))
 
     signal = None
     best = (-1, -1.0)
     rejected = []
+    vr = current_regime(df)["vol_ratio"]
     for c in cands:
         side, entry = c["side"], c["entry"]
+        ok_r, why_r = validate(dict(side=side, entry=entry, sl=c["sl"], tp=c["tp"]), a, symbol, cfg,
+                               sess if intraday else None, vr, c.get("family"))
+        if not ok_r:
+            rejected.append(f"Rejected {'BUY' if side == 1 else 'SELL'} from {c['strategy']}: risk check failed ({'; '.join(why_r)})")
+            continue
         want = "Bullish" if side == 1 else "Bearish"
         opp = "Bearish" if side == 1 else "Bullish"
         near = [L for L in levels if abs(L["price"] - entry) <= 0.6 * a and L["kind"] not in ("handle", "day")]
@@ -432,6 +485,11 @@ def analyze(symbol: str, mode: str, df: pd.DataFrame, df_htf: pd.DataFrame | Non
         for p in agree:
             reasons.append(f"{p['name']} supports it ({p['status']})")
         reasons.append(f"Risk {abs(entry - c['sl']) / pip:.1f} pips, reward {abs(c['tp'] - entry) / pip:.1f} pips (RR {c['rr']:.1f})")
+        # other enabled strategies that independently point the same way (only different families count as extra evidence)
+        helpers = sorted({x["strategy"] for x in cands if x["side"] == side and x is not c
+                          and x.get("family") and x.get("family") != c.get("family")})
+        if helpers:
+            reasons.append("Independent support from: " + ", ".join(helpers))
 
         score = len(passed)
         if (score / len(checks), c["rr"]) > best:
@@ -442,7 +500,9 @@ def analyze(symbol: str, mode: str, df: pd.DataFrame, df_htf: pd.DataFrame | Non
                           entry=entry, sl=c["sl"], tp1=entry + side * risk, tp2=c["tp"], rr=c["rr"],
                           risk_pips=round(risk / pip, 1), strategy=c["strategy"], score=score, of=len(checks),
                           grade="A" if ratio >= 0.8 else "B" if ratio >= 0.7 else "C",
-                          time=c["time"], expiry=c["expiry"], reasons=reasons,
+                          time=c["time"], expiry=c["expiry"], reasons=reasons, family=c.get("family", ""),
+                          invalidation=c.get("invalidation") or "Invalid if price closes beyond the stop-loss",
+                          supporting=helpers, key=c.get("key", ""),
                           checks=dict(passed=passed, missing=missing),
                           cancel=(f"Cancel if price closes beyond SL, or limit not filled within {c['expiry']} bars"
                                   if c["entry_type"] == "limit" else "Skip if price has already run >0.5R from entry"),
@@ -464,7 +524,10 @@ def analyze(symbol: str, mode: str, df: pd.DataFrame, df_htf: pd.DataFrame | Non
             if p["status"] == "forming":
                 watch.append(f"{p['name']} forming - {p['note']}")
 
+    # detail=False skips the per-strategy table and chart history (the replay / backtest does not need them)
+    rows, hist, reg = strategy_report(df, symbol, mode, cfg, enabled, dec=dec) if (signals and detail) else ([], [], current_regime(df))
     return dict(symbol=symbol, mode=mode, interval=interval, price=price, price_dec=dec, atr_pips=round(a / pip, 1),
+                strategies=rows, history=hist, regime=reg,
                 time=df.index[-1].isoformat(), session=sess, trend=trend,
                 htf=dict(name=htf_name, **htf) if htf else None, smas={str(k): v for k, v in smas.items()},
                 levels=levels, patterns=pats, zones=dict(fvgs=fvgs, obs=obs), range=rng, signal=signal, watch=watch)

@@ -41,7 +41,7 @@ def test_backtest_sane(cls, mode):
     df = _df(strat.preset["interval"])
     res = run_backtest(df, strat.generate(df, "EURUSD"), "EURUSD")
     if res.stats["trades"]:
-        assert res.trades["r"].max() <= strat.preset["rr"] + 1e-9
+        assert res.trades["r"].max() <= res.trades["planned_rr"].max() + 1e-9  # a trade can never earn more than its planned reward
         assert (res.equity > 0).all()
 
 

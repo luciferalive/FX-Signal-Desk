@@ -2,7 +2,8 @@
 // FX Signal Desk - live signals inside TradingView (works on any forex pair, gold and any timeframe 1m to 1M).
 // How to use: open a chart > press "Pine Editor" at the bottom > delete everything > paste this whole file >
 // press "Add to chart". Then right-click the indicator > "Add alert" if you want phone notifications.
-// Shows: killzones (New York time), previous day / week highs and lows, Asia range, today high / low, daily /
+// Clean by default: one small arrow per signal (hover for the details), only the newest trade is drawn in full, nearby
+// level names never overlap, and every layer has a switch in the settings. Shows: killzones (New York time), previous day / week highs and lows, Asia range, today high / low, daily /
 // midnight / weekly opens, SMA 50 / 100 / 200, fair value gaps, liquidity sweeps and trade signals with entry,
 // stop loss, TP1, TP2 and a confirmation score. News is not available inside Pine: use TradingView's own
 // Economic Calendar (red = high impact) or the FX Signal Desk dashboard.
@@ -15,7 +16,11 @@ G3 = "3. Averages"
 G4 = "4. Fair value gaps"
 G5 = "5. Sessions (New York time)"
 
-showSig  = input.bool(true, "Show trade signals", group=G1)
+showSig  = input.bool(true, "Show signal markers (one small arrow per signal, hover for details)", group=G1)
+showAct  = input.bool(true, "Show the active trade (entry, stop loss, TP1, TP2)", group=G1)
+showHist = input.bool(false, "Keep past signal markers", group=G1)
+maxHist  = input.int(10, "Past markers to keep", minval=1, maxval=100, group=G1)
+dupBars  = input.int(12, "Ignore the same signal repeating within (bars)", minval=0, maxval=100, group=G1)
 stratSel = input.string("Both", "Strategy", options=["Both", "ICT sweep + FVG", "Trend pullback"], group=G1)
 minScore = input.int(5, "Minimum confirmations (out of 9)", minval=1, maxval=9, group=G1)
 rrInp    = input.float(2.0, "Reward to risk for TP2", minval=1.0, step=0.5, group=G1)
@@ -26,15 +31,15 @@ htfInp   = input.string("Auto", "Higher timeframe for trend", options=["Auto", "
 showPD    = input.bool(true, "Previous day high / low", group=G2)
 showPW    = input.bool(true, "Previous week high / low", group=G2)
 showAsia  = input.bool(true, "Asia range high / low", group=G2)
-showToday = input.bool(true, "Today high / low", group=G2)
-showOpens = input.bool(true, "Daily, midnight and weekly open", group=G2)
+showToday = input.bool(false, "Today high / low (minor)", group=G2)
+showOpens = input.bool(false, "Daily, midnight and weekly open (minor)", group=G2)
 showLbl   = input.bool(true, "Level names on the right", group=G2)
-showSweep = input.bool(true, "Mark liquidity sweeps", group=G2)
+showSweep = input.bool(false, "Mark liquidity sweeps (small dots)", group=G2)
 
 showMA = input.bool(true, "Show SMA 50 / 100 / 200", group=G3)
 
 showFvg  = input.bool(true, "Show fair value gaps", group=G4)
-maxFvg   = input.int(8, "Max gaps on chart", minval=1, maxval=30, group=G4)
+maxFvg   = input.int(4, "Max gaps on chart (nearest kept)", minval=1, maxval=30, group=G4)
 fvgMinAt = input.float(0.15, "Smallest gap (x ATR)", minval=0.0, step=0.05, group=G4)
 
 showSess = input.bool(true, "Shade killzones (intraday charts)", group=G5)
@@ -89,6 +94,17 @@ var float pendMss = na
 var array<box> fvgBox = array.new<box>()
 var array<int> fvgSide = array.new<int>()
 var array<label> lvlLbls = array.new<label>()
+var array<float> lblPx = array.new<float>()
+var array<box> actBox = array.new<box>()
+var array<line> actLine = array.new<line>()
+var array<label> actLbl = array.new<label>()
+var array<label> sigMk = array.new<label>()
+var int lastFireBar = -1000
+var int lastFireSide = 0
+var string lastFireStrat = ""
+var int actSide = 0
+var float actSl = na
+var float actTp2 = na
 
 // ------------------------------------------------------------------ sessions
 tAsia = time(timeframe.period, asiaS, tzInp)
@@ -236,8 +252,8 @@ body = math.abs(close - open)
 bullCandle = (close[1] < open[1] and close > open and close >= open[1] and open <= close[1] and body >= 0.8 * atr14) or (rng >= 0.8 * atr14 and rng > 0 and (math.min(open, close) - low) / rng >= 0.6 and body / rng <= 0.3)
 bearCandle = (close[1] > open[1] and close < open and close <= open[1] and open >= close[1] and body >= 0.8 * atr14) or (rng >= 0.8 * atr14 and rng > 0 and (high - math.max(open, close)) / rng >= 0.6 and body / rng <= 0.3)
 
-plotshape(showSweep and bearSweep, "Bearish sweep", shape.triangledown, location.abovebar, color.new(color.red, 20), size=size.tiny)
-plotshape(showSweep and bullSweep, "Bullish sweep", shape.triangleup, location.belowbar, color.new(color.green, 20), size=size.tiny)
+plotshape(showSweep and bearSweep, "Bearish sweep", shape.circle, location.abovebar, color.new(color.gray, 30), size=size.tiny)
+plotshape(showSweep and bullSweep, "Bullish sweep", shape.circle, location.belowbar, color.new(color.gray, 30), size=size.tiny)
 
 // ------------------------------------------------------------------ signal engines
 int sSide = 0
@@ -362,27 +378,67 @@ if sSide != 0
     against := buy ? (trendDn or htfDn) : (trendUp or htfUp)
     failed := (c1 ? "" : "trend, ") + (c2 ? "" : "higher TF, ") + (c3 ? "" : "SMAs, ") + (c4 ? "" : "killzone, ") + (c5 ? "" : "key level, ") + (c6 ? "" : "FVG, ") + (c7 ? "" : "sweep/candle, ") + (c8 ? "" : "RR, ") + (c9 ? "" : "premium/discount, ")
 
-bool sFire = showSig and sSide != 0 and score >= minScore and not against and barstate.isconfirmed
+bool dupe = sSide != 0 and sSide == lastFireSide and sStrat == lastFireStrat and bar_index - lastFireBar < dupBars
+bool sFire = sSide != 0 and score >= minScore and not against and not dupe and barstate.isconfirmed
 string grade = score >= 7 ? "A" : score >= 5 ? "B" : "C"
 float pipSz = syminfo.type == "forex" ? syminfo.mintick * 10 : syminfo.mintick
 
+f_clearActive() =>
+    for b in actBox
+        box.delete(b)
+    array.clear(actBox)
+    for ln in actLine
+        line.delete(ln)
+    array.clear(actLine)
+    for lb in actLbl
+        label.delete(lb)
+    array.clear(actLbl)
+    true
+
+// the active trade disappears once its stop or final target has been touched
+if actSide != 0 and barstate.isconfirmed
+    bool hitSl = actSide == 1 ? low <= actSl : high >= actSl
+    bool hitTp = actSide == 1 ? high >= actTp2 : low <= actTp2
+    if hitSl or hitTp
+        f_clearActive()
+        actSide := 0
+
 if sFire
     lastSigBar := bar_index
-    color col = sSide == 1 ? color.green : color.red
+    lastFireBar := bar_index
+    lastFireSide := sSide
+    lastFireStrat := sStrat
+    color col = sSide == 1 ? color.new(color.teal, 0) : color.new(color.red, 0)
     int x2 = bar_index + sigBars
     string side = sSide == 1 ? "BUY" : "SELL"
     string pr = str.tostring(sEntry, format.mintick)
-    box.new(left=bar_index, top=math.max(sEntry, sTp2), right=x2, bottom=math.min(sEntry, sTp2), border_color=color.new(color.green, 60), bgcolor=color.new(color.green, 88))
-    box.new(left=bar_index, top=math.max(sEntry, sSl), right=x2, bottom=math.min(sEntry, sSl), border_color=color.new(color.red, 60), bgcolor=color.new(color.red, 88))
-    line.new(bar_index, sEntry, x2, sEntry, xloc=xloc.bar_index, color=color.new(color.white, 0), width=2)
-    line.new(bar_index, sSl, x2, sSl, xloc=xloc.bar_index, color=color.red, width=2)
-    line.new(bar_index, sTp1, x2, sTp1, xloc=xloc.bar_index, color=color.new(color.green, 30), style=line.style_dashed)
-    line.new(bar_index, sTp2, x2, sTp2, xloc=xloc.bar_index, color=color.green, width=2)
-    label.new(x=x2, y=sEntry, text="ENTRY " + pr + " (" + sType + ")", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.gray, 20), textcolor=color.white, size=size.small)
-    label.new(x=x2, y=sSl, text="SL " + str.tostring(sSl, format.mintick) + "  " + str.tostring(math.abs(sEntry - sSl) / pipSz, "#.#") + " pips", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.red, 20), textcolor=color.white, size=size.small)
-    label.new(x=x2, y=sTp1, text="TP1 " + str.tostring(sTp1, format.mintick), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 40), textcolor=color.white, size=size.small)
-    label.new(x=x2, y=sTp2, text="TP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 20), textcolor=color.white, size=size.small)
-    label.new(x=bar_index, y=(sSide == 1 ? low : high), text=side + " " + grade + " " + str.tostring(score) + "/9\n" + sStrat, xloc=xloc.bar_index, style=sSide == 1 ? label.style_label_up : label.style_label_down, color=col, textcolor=color.white, size=size.normal, tooltip="Missing: " + failed)
+    string det = side + " - " + sStrat + "\nGrade " + grade + " (" + str.tostring(score) + "/9)\nEntry " + pr + " (" + sType + ")\nSL " + str.tostring(sSl, format.mintick) + "  " + str.tostring(math.abs(sEntry - sSl) / pipSz, "#.#") + " pips\nTP1 " + str.tostring(sTp1, format.mintick) + "\nTP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#") + "\nMissing: " + failed
+    if showAct
+        f_clearActive()   // only the newest trade is drawn in full, so signals never pile up
+        array.push(actBox, box.new(left=bar_index, top=math.max(sEntry, sTp2), right=x2, bottom=math.min(sEntry, sTp2), border_color=color.new(color.green, 80), bgcolor=color.new(color.green, 93)))
+        array.push(actBox, box.new(left=bar_index, top=math.max(sEntry, sSl), right=x2, bottom=math.min(sEntry, sSl), border_color=color.new(color.red, 80), bgcolor=color.new(color.red, 93)))
+        array.push(actLine, line.new(bar_index, sEntry, x2, sEntry, xloc=xloc.bar_index, color=color.new(color.blue, 0), width=2))
+        array.push(actLine, line.new(bar_index, sSl, x2, sSl, xloc=xloc.bar_index, color=color.new(color.red, 0), width=1))
+        array.push(actLine, line.new(bar_index, sTp1, x2, sTp1, xloc=xloc.bar_index, color=color.new(color.green, 40), style=line.style_dashed))
+        array.push(actLine, line.new(bar_index, sTp2, x2, sTp2, xloc=xloc.bar_index, color=color.new(color.green, 0), width=2))
+        array.push(actLbl, label.new(x=x2, y=sEntry, text="ENTRY " + pr, xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.blue, 15), textcolor=color.white, size=size.small))
+        array.push(actLbl, label.new(x=x2, y=sSl, text="SL " + str.tostring(sSl, format.mintick) + "  " + str.tostring(math.abs(sEntry - sSl) / pipSz, "#.#") + "p", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.red, 15), textcolor=color.white, size=size.small))
+        if math.abs(sTp2 - sTp1) > 0.7 * atr14   // skip TP1 text when it would sit on top of another label
+            array.push(actLbl, label.new(x=x2, y=sTp1, text="TP1 " + str.tostring(sTp1, format.mintick), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 40), textcolor=color.white, size=size.small))
+        array.push(actLbl, label.new(x=x2, y=sTp2, text="TP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 15), textcolor=color.white, size=size.small))
+        actSide := sSide
+        actSl := sSl
+        actTp2 := sTp2
+    if showSig
+        if not showHist
+            for mk in sigMk
+                label.delete(mk)
+            array.clear(sigMk)
+        float mkY = sSide == 1 ? low - 0.4 * atr14 : high + 0.4 * atr14
+        array.push(sigMk, label.new(x=bar_index, y=mkY, text="", xloc=xloc.bar_index, style=sSide == 1 ? label.style_triangleup : label.style_triangledown, color=col, size=size.small, tooltip=det))
+        while array.size(sigMk) > maxHist
+            label.delete(array.get(sigMk, 0))
+            array.remove(sigMk, 0)
     alert(side + " " + syminfo.ticker + " " + timeframe.period + " | " + sStrat + " | grade " + grade + " (" + str.tostring(score) + "/9) | entry " + pr + " (" + sType + ") | SL " + str.tostring(sSl, format.mintick) + " | TP1 " + str.tostring(sTp1, format.mintick) + " | TP2 " + str.tostring(sTp2, format.mintick) + " | Not financial advice", alert.freq_once_per_bar_close)
 
 alertcondition(sFire and sSide == 1, "FX Desk BUY signal", "FX Desk BUY {{ticker}} {{interval}}")
@@ -407,7 +463,15 @@ plot(showMA ? sma200 : na, "SMA 200", color.new(color.white, 0), 3)
 // ------------------------------------------------------------------ names on the right + info table
 f_lbl(arr, txt, p, col) =>
     if not na(p)
-        array.push(arr, label.new(x=bar_index + 2, y=p, text=txt + " " + str.tostring(p, format.mintick), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(col, 100), textcolor=col, size=size.small))
+        bool clash = false
+        int n = array.size(lblPx)
+        if n > 0
+            for i = 0 to n - 1
+                if math.abs(array.get(lblPx, i) - p) < 0.5 * atr14
+                    clash := true
+        if not clash   // labels are placed in priority order; one that would overlap another is skipped
+            array.push(lblPx, p)
+            array.push(arr, label.new(x=bar_index + 2, y=p, text=txt + " " + str.tostring(p, format.mintick), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(col, 100), textcolor=col, size=size.small))
     true
 
 var table info = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 25), border_width=1)
@@ -416,6 +480,7 @@ if barstate.islast
     for l in lvlLbls
         label.delete(l)
     array.clear(lvlLbls)
+    array.clear(lblPx)
     if showLbl
         if showPD
             f_lbl(lvlLbls, "PDH", pdH, color.orange)

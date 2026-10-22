@@ -1,0 +1,6 @@
+{
+  "strategies": { "enabled": ["trendpull", "retest", "donchian", "ict"] },
+  "risk": { "account": 5000, "risk_pct": 0.5, "min_rr": 2.0, "sessions": ["London KZ", "NY AM KZ"] },
+  "workflow": { "use_precision": false },
+  "spreads": { "EURUSD": 0.6 }
+}
