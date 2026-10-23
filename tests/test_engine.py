@@ -264,3 +264,9 @@ def test_dashboard_json_has_strategies_history_workflow_and_no_duplicate_markers
         for h in an["history"]:
             gap.setdefault((h["key"], h["side"]), []).append(h["t"])
         assert all(b > a for ts in gap.values() for a, b in zip(ts, ts[1:]))
+
+
+def test_telegram_chat_ids_accept_several():
+    from fxbot.notify import chat_ids
+    assert chat_ids("1, 2;3,") == ["1", "2", "3"]
+    assert chat_ids(None) == [] and chat_ids("7") == ["7"]

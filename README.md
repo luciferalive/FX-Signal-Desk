@@ -138,7 +138,7 @@ flowchart LR
 1. In Telegram search **@BotFather**, send `/newbot`, pick a name and a username ending in `bot`. Copy the token.
 2. Open your new bot, press **Start**, and send `hi`.
 3. In a browser open `https://api.telegram.org/bot` + your token + `/getUpdates`. Copy the number after `"chat":{"id":`.
-4. Repo **Settings > Secrets and variables > Actions > New repository secret**. Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Names must match exactly.
+4. Repo **Settings > Secrets and variables > Actions > New repository secret**. Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Names must match exactly. To alert more than one person, each person presses Start on the bot, then put all their chat IDs in `TELEGRAM_CHAT_ID` separated by commas (for example `111111,222222`).
 5. **Actions > telegram-test > Run workflow**. A message should arrive. After that, **scan** runs by itself every 15 minutes on weekdays.
 
 ### Path 3: test it on real history
