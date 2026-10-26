@@ -168,7 +168,38 @@ def summarize(sym: str, tfs: dict, wf: dict | None = None) -> dict:
         sig["15m"] = dict(side=s["direction"], grade="A" if s["confidence"] >= 80 else "B" if s["confidence"] >= 65 else "C",
                           strategy=s["strategy"])
     first = next(d for tf, d in tfs.items())  # TIMEFRAMES is ordered smallest first, so this is the freshest price
-    return dict(symbol=sym, dec=first["an"]["price_dec"], price=first["an"]["price"], sig=sig, have=list(tfs))
+    chg, spark = _move(tfs)
+    return dict(symbol=sym, dec=first["an"]["price_dec"], price=first["an"]["price"], sig=sig, have=list(tfs), chg=chg, spark=spark)
+
+
+def _move(tfs: dict) -> tuple:
+    """(percent change over about 24 hours, 40 recent closes for the little chart) from the 1h candles, else the best available."""
+    for tf, per in (("1h", 24), ("30m", 48), ("15m", 96), ("4h", 6), ("1d", 1)):
+        d = tfs.get(tf)
+        if not d or len(d["candles"]) < max(per + 1, 12):
+            continue
+        cl = [c[4] for c in d["candles"]]
+        base = cl[-1 - per] if len(cl) > per else cl[0]
+        if not base:
+            continue
+        tail = cl[-40:]
+        step = max(1, len(tail) // 40)
+        return round((cl[-1] / base - 1) * 100, 3), [round(float(x), 6) for x in tail[::step]]
+    return 0.0, []
+
+
+MAJORS = ("USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "NZD")
+
+
+def strength(index_pairs: list) -> dict:
+    """How strong each major currency has been over about 24 hours: the average move of every pair it is in
+    (up for the first currency in a pair, down for the second). Percent, rounded. Not a trading signal."""
+    acc = {c: [] for c in MAJORS}
+    for p in index_pairs:
+        a, b = p["symbol"][:3], p["symbol"][3:6]
+        if a in acc and b in acc:
+            acc[a].append(p["chg"]); acc[b].append(-p["chg"])
+    return {c: round(sum(v) / len(v), 3) for c, v in acc.items() if v}
 
 
 def build(symbols=None, out_dir: str = "docs", frames=None, news=None, demo: bool = False, inline: bool = False,
@@ -192,8 +223,19 @@ def build(symbols=None, out_dir: str = "docs", frames=None, news=None, demo: boo
                for k, v in TIMEFRAMES.items()]
     from .strategies import FAMILIES, STRATEGIES
     strat_list = [dict(key=k, **{x: v for x, v in c.describe().items() if x != "name"}) for k, c in STRATEGIES.items()]
+    from . import newsplay
+    from .news import fetch_headlines, sample_headlines
+    c15 = {sy: (pairs[sy]["tfs"].get("15m") or {}).get("candles") for sy in pairs}
+    nt = cfg.get("news_trading", {})
+    play = None
+    if nt.get("enabled", True):
+        heads = sample_headlines() if demo else fetch_headlines()
+        infos = {sy: dict(bias=(d.get("workflow") or {}).get("bias"), trend=(((d.get("workflow") or {}).get("plan") or {}).get("trend") or {}).get("structure"))
+                 for sy, d in pairs.items()}
+        play = newsplay.build(events, index_pairs, c15, t_offset=IST_OFFSET, hours_ahead=nt.get("hours_ahead", 96), hours_back=nt.get("hours_back", 30),
+                              symbols=nt.get("symbols"), infos=infos, headlines=heads, strength=strength(index_pairs))
     index = dict(generated=pd.Timestamp.now(tz="UTC").isoformat(), demo=demo, tfs=tf_list, pairs=index_pairs,
-                 strategies=strat_list, families=FAMILIES, workflow=cfg["workflow"])
+                 strategies=strat_list, families=FAMILIES, workflow=cfg["workflow"], strength=strength(index_pairs), newsplay=play)
 
     tpl = open(TEMPLATE, encoding="utf-8").read()
     os.makedirs(out_dir, exist_ok=True)

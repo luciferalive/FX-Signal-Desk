@@ -35,7 +35,7 @@ def parse_events(rows: list[dict]) -> list[dict]:
         out.append(dict(
             ts=ts, ccy=str(r.get("country", "")).strip().upper(), impact=impact,
             title=str(r.get("title", "")).strip(), forecast=str(r.get("forecast", "") or "").strip(),
-            previous=str(r.get("previous", "") or "").strip(),
+            previous=str(r.get("previous", "") or "").strip(), actual=str(r.get("actual", "") or "").strip(),
         ))
     out.sort(key=lambda e: e["ts"])
     return out
@@ -109,3 +109,52 @@ def upcoming_high(events: list[dict], symbol: str, now: pd.Timestamp | None = No
     mins = round((e["ts"] - t) / 60)
     when = f"in {mins} min" if mins >= 0 else f"{-mins} min ago"
     return f"WARNING high-impact news: {e['ccy']} {e['title']} {when}. Avoid new trades until it has passed."
+
+
+# ---------------------------------------------------------------- headlines (context for the news playbook)
+HEADLINE_FEEDS = [("FXStreet", "https://www.fxstreet.com/rss/news"), ("ForexLive", "https://www.forexlive.com/feed/news")]
+
+
+def parse_rss(xml_text: str, source: str, limit: int = 40) -> list[dict]:
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+    out = []
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return out
+    for it in root.iter("item"):
+        title = (it.findtext("title") or "").strip()
+        if not title:
+            continue
+        try:
+            ts = int(parsedate_to_datetime(it.findtext("pubDate") or "").timestamp())
+        except Exception:
+            ts = 0
+        out.append(dict(title=title, source=source, ts=ts, url=(it.findtext("link") or "").strip()))
+        if len(out) >= limit:
+            break
+    return out
+
+
+def fetch_headlines() -> list[dict]:
+    """Latest market headlines from two free RSS feeds. Never raises; a feed that fails is skipped."""
+    out: list[dict] = []
+    for name, url in HEADLINE_FEEDS:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; fxbot/0.4)"})
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                out += parse_rss(resp.read().decode("utf-8", "replace"), name)
+        except Exception:
+            continue
+    out.sort(key=lambda h: h["ts"], reverse=True)
+    return out
+
+
+def sample_headlines(now: pd.Timestamp | None = None) -> list[dict]:
+    """Clearly fake headlines for the offline demo."""
+    now = now or pd.Timestamp.now(tz="UTC")
+    rows = [(-0.3, "EUR/USD rises toward 1.1350 as the dollar softens ahead of US jobs data"), (-0.8, "Gold extends gains as Treasury yields slip"),
+            (-1.5, "ECB's Lagarde says inflation outlook is balanced"), (-2.2, "Gold falls as dollar firms before Fed speakers"),
+            (-3.0, "EUR/USD slips as German sentiment disappoints")]
+    return [dict(title=t, source="Sample", ts=int((now + pd.Timedelta(hours=h)).timestamp()), url="") for h, t in rows]

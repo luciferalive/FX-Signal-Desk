@@ -29,6 +29,8 @@ DEFAULTS: dict = {
     # multi-timeframe workflow: 1h plans, 15m confirms the setup, 5m executes, 1m is optional precision
     "workflow": {"plan": "1h", "setup": "15m", "execute": "5m", "precision": "1m", "use_precision": False,
                  "setup_max_age_bars": 3, "chase_r": 0.5},
+    # news trading playbook (information only: it never places orders). enabled=False hides it from the dashboard.
+    "news_trading": {"enabled": True, "symbols": ["EURUSD", "XAUUSD"], "hours_ahead": 96, "hours_back": 30},
     "backtest": {"slippage_pips": 0.2, "commission_pips": 0.0, "dev_fraction": 0.7},
 }
 

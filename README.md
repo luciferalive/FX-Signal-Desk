@@ -44,6 +44,17 @@
 
 ## What you get
 
+<div align="center"><img src="assets/dashboard-night.png" alt="Night desk dashboard: status bar, price ticker, currency strength radar, best setup, pair tiles" width="100%"><br><sub>The night desk: live India clock, open sessions, next big news, a price ticker, the currency-strength radar, the best setup right now, and a tile with a mini chart for every pair.</sub></div>
+
+<br>
+
+<table>
+<tr>
+<td width="55%"><img src="assets/news-playbook.png" alt="News trading playbook for EURUSD with BUY / SELL / WAIT lean, reasons and news"></td>
+<td width="45%" valign="top"><b>News trading playbook</b> (optional, information only)<br><br>A clear <b>BUY, SELL or WAIT</b> for EURUSD and gold, with every point that went into it. Around big news like Non-Farm Payrolls it forces WAIT, shows an if-then map (number above or below the forecast), and lets you type the real number to see the direction. It is a lean from data, not a prediction, and it never places a trade. <a href="guides/NEWS_TRADING.md">How it works</a></td>
+</tr>
+</table>
+
 <table>
 <tr>
 <td width="50%"><img src="assets/chart-dark.png" alt="Dark chart with levels, FVGs and a trade"></td>
@@ -51,7 +62,7 @@
 </tr>
 <tr>
 <td align="center"><sub>Dark mode: killzones, FVGs, daily / weekly levels, SMA 50 / 100 / 200 and the trade, all drawn on the chart</sub></td>
-<td align="center"><sub>Light mode. One button switches Auto / Light / Dark</sub></td>
+<td align="center"><sub>Light mode. One button switches Auto / Light / Dark (dark is the default)</sub></td>
 </tr>
 </table>
 
@@ -90,6 +101,8 @@
 - **Multi-timeframe workflow:** 1h plan, 15m setup, 5m execution, optional 1m precision. A lower timeframe can never override the plan.
 - **Confluence without double counting:** agreement is counted per idea (family), so two breakout rules count as one vote. The 0 to 100 score is evidence, **not** a win probability.
 - **Risk checks on every signal:** stop size, minimum reward-to-risk, spread, volatility, session, de-duplication, plus a lot-size suggestion. The signal engine only analyses and alerts; placing orders is a separate, opt-in layer (see below).
+- **News trading playbook (optional, information only):** a clear BUY, SELL or WAIT for EURUSD and gold, with the reasons (1h trend, currency strength, signal engine, upcoming news, headlines), an if-then map for big events like Non-Farm Payrolls, a box to type the real number, and how the pair reacted to past events. It never places news trades. [guides/NEWS_TRADING.md](guides/NEWS_TRADING.md)
+- **Night-desk dashboard:** live status bar (India time, open sessions, next big news), price ticker, a currency-strength radar, pair tiles with mini charts, and the best setup right now.
 - **WAIT is a valid answer.** No setup means no signal, never a made-up one.
 - **Clean chart:** layers you can switch on and off, merged zones, compact markers with hover details.
 - **Fundamental news panel:** Forex Factory calendar filtered to the pair, coloured by impact, with a warning before high-impact releases.
@@ -251,6 +264,7 @@ Free Yahoo data is limited (about 60 days of 15m, 2 years of 4H / daily). For lo
 fxbot/            analysis, zones, news, scanner, dashboard, backtest
 fxbot/strategies/ the 13 strategies (one file per family)
 fxbot/workflow.py 1h > 15m > 5m decision;  regime.py, confluence.py, risk.py
+fxbot/newsplay.py news trading playbook (information only)
 fxbot/trading/    optional trading layer: brokers (sim, XM/MT5, OANDA), risk manager, sizing, trade manager, panel
 guides/           strategy reference
 fxbot/templates/  the dashboard page
@@ -275,6 +289,9 @@ Good first contributions:
 - [ ] Translations
 - [ ] Publish backtest results for each pair in the repo (honest numbers, committed with the code)
 - [ ] Test the XM / MT5 adapter on a real XM demo account and report what needs fixing
+- [x] News trading playbook (BUY / SELL / WAIT lean for EURUSD and gold, information only)
+- [ ] Backtest the news-lean scoring so its points can be tuned with evidence
+- [ ] Telegram heads-up before big news
 - [ ] Prop-firm risk rules (daily loss limit, max drawdown) in alerts
 - [ ] Daily pivot level layer and more strategy rules from your favourite sources
 

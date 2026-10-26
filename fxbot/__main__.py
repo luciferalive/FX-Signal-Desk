@@ -65,6 +65,11 @@ def cmd_backtest(a):
         print(f"  {t:<52} trades={s.get('trades')}  WR={s.get('win_rate')}%  avgR={s.get('avg_R')}  PF={s.get('profit_factor')}  DD={s.get('max_drawdown_pct')}%")
 
 
+def pd_time(ts: int) -> str:
+    import pandas as pd
+    return pd.Timestamp(ts, unit="s", tz="UTC").tz_convert("Asia/Kolkata").strftime("%a %d %b %H:%M")
+
+
 def main():
     ap = argparse.ArgumentParser(prog="fxbot")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -108,6 +113,13 @@ def main():
     db.add_argument("--out", default="docs", help="output folder (index.html + data/*.json)")
     db.add_argument("--demo", action="store_true", help="made-up prices, labelled as demo, no internet needed")
 
+    nw = sub.add_parser("news", help="news trading playbook: what big events mean for each pair (information only, places no orders)")
+    nw.add_argument("--demo", action="store_true", help="use made-up sample events instead of the live calendar")
+    nw.add_argument("--symbols", nargs="*", default=None)
+    nw.add_argument("--hours", type=int, default=96, help="how many hours ahead to show")
+    nw.add_argument("--currency", help="only events for one currency, for example USD")
+    nw.add_argument("--event", help="part of an event title, with --actual")
+    nw.add_argument("--actual", help="the real number once released (for example 210K): shows the direction")
     sub.add_parser("strategies", help="list every strategy with its family, style and views")
     wf = sub.add_parser("workflow", help="run the 1h plan -> 15m setup -> 5m execution check for one pair (live data)")
     wf.add_argument("--symbol", default="EURUSD")
@@ -164,6 +176,70 @@ def main():
         else:
             path = build(a.symbols, out)
         print(f"dashboard -> {path}")
+    elif a.cmd == "news":
+        from .news import fetch_news, sample_news, fetch_headlines, sample_headlines
+        from . import newsplay
+        from .workflow import evaluate
+        cfg = load_config()
+        syms = a.symbols or cfg.get("news_trading", {}).get("symbols") or ["EURUSD", "XAUUSD"]
+        news = sample_news() if a.demo else fetch_news()
+        if not news.get("ok"):
+            print("Could not get the economic calendar: " + str(news.get("error")))
+            return
+        heads = sample_headlines() if a.demo else fetch_headlines()
+        if a.demo:
+            from .dashboard import demo_frames
+            frames = demo_frames(syms)
+        else:
+            from .data import load_frames
+            frames = load_frames(syms, ["5m", "15m", "1h"])
+        pairs, infos = [], {}
+        for sy in syms:
+            fr = frames.get(sy) or {}
+            h1 = fr.get("1h")
+            if h1 is None or len(h1) < 30:
+                print(f"{sy}: no price data, skipped")
+                continue
+            chg = round((float(h1["close"].iloc[-1]) / float(h1["close"].iloc[-25]) - 1) * 100, 3) if len(h1) > 25 else 0.0
+            try:
+                wf = evaluate(sy, fr, cfg, news["events"])
+            except Exception as e:  # keep going: a missing plan only removes the trend points
+                print(f"{sy}: trend check failed ({type(e).__name__})")
+                wf = {}
+            sig = {}
+            if wf.get("signal"):
+                sg = wf["signal"]
+                sig["15m"] = dict(side=sg["direction"], grade="A" if sg["confidence"] >= 80 else "B" if sg["confidence"] >= 65 else "C")
+            pairs.append(dict(symbol=sy, dec=5 if sy[:3] not in ("XAU", "XAG") and "JPY" not in sy else 3, price=float(h1["close"].iloc[-1]), chg=chg, sig=sig))
+            infos[sy] = dict(bias=wf.get("bias"), trend=((wf.get("plan") or {}).get("trend") or {}).get("structure"))
+        play = newsplay.build(news["events"], pairs, None, hours_ahead=a.hours, symbols=[p["symbol"] for p in pairs], infos=infos, headlines=heads)
+        for b in play["symbols"]:
+            v = b["verdict"]
+            print(f"\n=== {b['symbol']}  {b['price']:.{b['dec']}f} ({b['chg']:+.2f}% 24h)   LEAN: {v['lean']}   score {v['score']:+d}   confidence {v['confidence']}")
+            if v["note"]:
+                print("  ! " + v["note"])
+            for r in v["reasons"]:
+                print(f"  {r['pts']:+4d}  {r['text']}")
+            evs = [e for e in b["events"] if not a.currency or e["ccy"] == a.currency.upper()]
+            if a.actual and a.event:
+                evs = [e for e in evs if a.event.lower() in e["title"].lower()]
+            for e in evs:
+                print(f"\n  {e['ccy']} {e['title']} [{e['label']}]  {pd_time(e['ts'])} India time" + ("  (already released)" if e["past"] else ""))
+                print(f"    forecast {e['forecast'] or '-'}   previous {e['previous'] or '-'}")
+                r = e["scenarios"][0] if e["scenarios"] else None
+                if a.actual:
+                    o = newsplay.outcome(dict(title=e["title"], ccy=e["ccy"], forecast=e["forecast"]), a.actual)
+                    if o and r and o["ccy_dir"]:
+                        print(f"    -> {o['text']}  So: {r['up'] if o['result'] == 'above' else r['down']} {b['symbol']}")
+                    else:
+                        print("    -> Cannot judge this number (no forecast, or it is a statement).")
+                elif r:
+                    print(f"    {r['up_label']}: {r['up']}   {r['down_label']}: {r['down']}")
+            if b["headlines"]:
+                print("\n  Headlines:")
+                for h in b["headlines"][:4]:
+                    print("    - " + h["title"])
+        print("\nA lean from data, not a prediction. Information only: the desk never places news trades. " + newsplay.CAUTIONS[0])
     elif a.cmd == "strategies":
         from .strategies import FAMILIES
         for k, c in STRATEGIES.items():
