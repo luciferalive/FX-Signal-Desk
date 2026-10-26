@@ -1,0 +1,18 @@
+{
+  "broker": {
+    "name": "xm",
+    "mt5": {
+      "suffix": "",
+      "server_utc_offset_hours": null,
+      "commission_per_lot_round_turn": 0.0
+    }
+  },
+  "demo": {
+    "risk": { "risk_pct": 0.25, "max_daily_loss_pct": 2.0 },
+    "exits": { "breakeven": { "enabled": false, "after": "tp1" } },
+    "sessions": { "allowed": ["London", "New York", "overlap"] }
+  },
+  "live": {
+    "risk": { "risk_pct": 0.1, "max_positions": 1 }
+  }
+}

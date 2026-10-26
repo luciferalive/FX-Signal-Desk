@@ -112,6 +112,14 @@ def main():
     wf = sub.add_parser("workflow", help="run the 1h plan -> 15m setup -> 5m execution check for one pair (live data)")
     wf.add_argument("--symbol", default="EURUSD")
     wf.add_argument("--synthetic", action="store_true")
+    tr = sub.add_parser("trade", help="automated trading (DEMO by default): demo, status, run, panel, history and controls")
+    tr.add_argument("action", choices=["demo", "status", "run", "panel", "history", "pause", "resume", "stop", "start",
+                                       "unlock", "close", "close-all", "liquidate"])
+    tr.add_argument("--profile", default="demo", choices=["demo", "live"], help="live needs a typed confirmation every run")
+    tr.add_argument("--symbols", nargs="+", default=None)
+    tr.add_argument("--once", action="store_true", help="run a single cycle and exit")
+    tr.add_argument("--position", default=None, help="position id for 'close'")
+    tr.add_argument("--port", type=int, default=8765)
     sub.add_parser("telegram-test", help="send a test message to your Telegram")
     wh = sub.add_parser("webhook")
     wh.add_argument("--port", type=int, default=int(os.getenv("PORT", 8080)))
@@ -176,6 +184,9 @@ def main():
             print(f"  {k:8} {v['status']:5} {v['text']}")
         if r["signal"]:
             print(json.dumps(r["signal"], indent=2, default=str))
+    elif a.cmd == "trade":
+        from .trading.cli import main as trade_main
+        raise SystemExit(trade_main(a))
     elif a.cmd == "telegram-test":
         from .notify import telegram_test
         raise SystemExit(0 if telegram_test() else 1)

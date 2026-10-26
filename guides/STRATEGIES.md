@@ -87,7 +87,7 @@ Source column: **Book** = "9 Advanced and Profitable Trading Strategies" (the PD
 
 - **Regime.** Trend strategies skip ranges; range strategies skip trends; most skip volatile markets.
 - **Risk.** Stop distance within 0.4 to 4 ATR, reward-to-risk at least 1.5 (1.0 for mean reversion), spread at most 15% of the stop, volatility between 0.35x and 2.5x normal, optional session filter, de-duplication of the same idea.
-- **No order execution.** The project only analyses and alerts. Lot size is a suggestion from your `config.json` account settings; crosses are approximate, check your broker's calculator.
+- **The signal engine never places orders.** It analyses and alerts; the lot size it shows is a suggestion from your `config.json` account settings (crosses are approximate). Order placement is a separate, opt-in layer with its own risk manager: see [TRADING.md](TRADING.md).
 - **News.** High-impact events for the pair add a warning, they do not silently change the signal.
 
 ## 6. Limitations (read these)

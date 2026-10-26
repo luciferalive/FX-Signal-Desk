@@ -17,13 +17,15 @@
 ![Telegram](https://img.shields.io/badge/alerts-Telegram-26a5e4?logo=telegram&logoColor=white)
 ![TradingView](https://img.shields.io/badge/indicator-TradingView-131722?logo=tradingview&logoColor=white)
 ![Strategies](https://img.shields.io/badge/strategies-13-2ecc9a)
+![Trading](https://img.shields.io/badge/auto--trading-DEMO%20first-f5b942)
+![Brokers](https://img.shields.io/badge/brokers-XM%20(MT5)%20%C2%B7%20OANDA%20%C2%B7%20sim-8a7bff)
 ![Pairs](https://img.shields.io/badge/pairs-30-2ecc9a)
 ![Timeframes](https://img.shields.io/badge/timeframes-1m%E2%86%921M-2ecc9a)
 
 **A free, open-source forex signal desk. Every signal comes with entry, stop loss, take profit and the reasons behind it.**<br>
 13 strategies in 7 families, a 1h plan > 15m setup > 5m entry workflow, risk checks on every signal, key levels, fair value gaps, killzones, news colours and Telegram alerts. No server, no subscription.
 
-[**Open the dashboard**](https://luciferalive.github.io/FX-Signal-Desk/) · [**Quick start**](#-quick-start) · [**Contribute**](#-help-build-this) · [**Roadmap**](#-roadmap)
+[**Open the dashboard**](https://luciferalive.github.io/FX-Signal-Desk/) · [**Quick start**](#quick-start) · [**Auto-trading**](#automated-trading-optional-demo-first) · [**Contribute**](#help-build-this) · [**Roadmap**](#roadmap)
 
 </div>
 
@@ -87,7 +89,7 @@
 - **13 strategies in 7 families** (ICT / SMC, trend, price action, breakout, mean reversion, scalping, swing). Turn each on or off in the dashboard, or run them all. Details and sources: [guides/STRATEGIES.md](guides/STRATEGIES.md).
 - **Multi-timeframe workflow:** 1h plan, 15m setup, 5m execution, optional 1m precision. A lower timeframe can never override the plan.
 - **Confluence without double counting:** agreement is counted per idea (family), so two breakout rules count as one vote. The 0 to 100 score is evidence, **not** a win probability.
-- **Risk checks on every signal:** stop size, minimum reward-to-risk, spread, volatility, session, de-duplication, plus a lot-size suggestion. The project never places orders.
+- **Risk checks on every signal:** stop size, minimum reward-to-risk, spread, volatility, session, de-duplication, plus a lot-size suggestion. The signal engine only analyses and alerts; placing orders is a separate, opt-in layer (see below).
 - **WAIT is a valid answer.** No setup means no signal, never a made-up one.
 - **Clean chart:** layers you can switch on and off, merged zones, compact markers with hover details.
 - **Fundamental news panel:** Forex Factory calendar filtered to the pair, coloured by impact, with a warning before high-impact releases.
@@ -153,6 +155,45 @@ flowchart LR
 3. For alerts: **Add alert**, choose **FX Signal Desk**, condition **Any alert() function call**.
 4. TradingView has its own Economic Calendar for news.
 
+## Automated trading (optional, DEMO first)
+
+An optional layer can connect to a broker, size trades from your **real equity**, run every idea through one central risk
+manager, place orders and manage them to the exit. **It is off unless you run it, it starts on a DEMO account, and nothing
+is proven profitable.** The strategies have no proven edge; this layer only makes execution disciplined.
+
+<div align="center"><img src="assets/trading-panel.png" alt="Local trading panel: account, open position with TP1 done, controls, decision log" width="85%"><br><sub>The local control panel (this computer only), shown on the simulated demo account.</sub></div>
+
+```
+signal engine -> arbitration -> RISK MANAGER (only approver) -> order manager -> broker (sim | XM/MT5 | OANDA)
+                                                                      |
+              audit log (every decision, in plain words) <- trade manager (TP1/TP2/TP3, stops, exits, every tick)
+```
+
+| Broker | Status |
+|---|---|
+| Built-in simulated account (`sim`) | Implemented and fully tested. Works offline: `python -m fxbot trade demo` |
+| **XM through MetaTrader 5** (`xm` / `mt5`) | Implemented, tested only against a **fake** MT5 module, **not yet against a real XM terminal**. Needs an XM **MT5** account and the MT5 terminal running on a Windows PC (`pip install -r requirements-mt5.txt`) |
+| OANDA (`oanda`) | Implemented, tested only against mock responses, not a real account |
+
+**Try it in 10 seconds (no broker, no money):**
+
+```bash
+python -m fxbot trade demo      # sizing, TP1/TP2/TP3, a spread rejection and a daily-loss lock, on a simulated account
+```
+
+**What it does for you**
+- Lot size from equity x risk% and the broker's own tick value; rounded down; rejected (never inflated) if the minimum lot is too big
+- Limits on total open risk, daily / weekly loss (persistent lock), positions, currency exposure, correlation, margin, spread, news, sessions and rollover
+- TP1 / TP2 / TP3 partial closes, optional breakeven and trailing; a stop is never widened or removed
+- Order saved before sending, timeouts resolved by asking the broker (never a blind retry), full recovery after a restart
+- Manual trades you open yourself are counted in the risk and never touched
+- Buttons: pause, **STOP ALL**, close one / all, emergency liquidation (`python -m fxbot trade panel`)
+
+Demo and live are separate profiles; live is stricter, disabled by default and needs a typed confirmation every run.
+Step-by-step XM demo setup, all limits, controls, failure handling and known limitations: **[guides/TRADING.md](guides/TRADING.md)**.
+Credentials are never stored in the project: the bot uses the account already logged in inside your MT5 terminal,
+and `trading.json` is git-ignored.
+
 ## Strategies
 
 | Family | Strategies |
@@ -190,6 +231,8 @@ List them in your terminal with `python -m fxbot strategies`.
 ```bash
 pip install -r requirements.txt
 python -m fxbot strategies                        # list all strategies
+python -m fxbot trade demo                        # offline walk-through of the trading layer (simulated)
+python -m fxbot trade status                      # connection test for the broker in trading.json
 python -m fxbot workflow --symbol EURUSD          # 1h plan > 15m setup > 5m entry
 python -m fxbot analyze --symbol EURUSD --mode scalp
 python -m fxbot dashboard --demo --out demo       # offline demo with made-up prices
@@ -208,10 +251,11 @@ Free Yahoo data is limited (about 60 days of 15m, 2 years of 4H / daily). For lo
 fxbot/            analysis, zones, news, scanner, dashboard, backtest
 fxbot/strategies/ the 13 strategies (one file per family)
 fxbot/workflow.py 1h > 15m > 5m decision;  regime.py, confluence.py, risk.py
+fxbot/trading/    optional trading layer: brokers (sim, XM/MT5, OANDA), risk manager, sizing, trade manager, panel
 guides/           strategy reference
 fxbot/templates/  the dashboard page
 pine/             TradingView indicator
-tests/            pytest suite
+tests/            pytest suite (signals, backtest, trading layer with a fake MT5)
 pairs.txt         your instruments
 .github/workflows CI, scan, dashboard, telegram-test, validate, backtest-history
 assets/           README images
@@ -230,6 +274,7 @@ Good first contributions:
 - [ ] More tests and a bigger replay suite
 - [ ] Translations
 - [ ] Publish backtest results for each pair in the repo (honest numbers, committed with the code)
+- [ ] Test the XM / MT5 adapter on a real XM demo account and report what needs fixing
 - [ ] Prop-firm risk rules (daily loss limit, max drawdown) in alerts
 - [ ] Daily pivot level layer and more strategy rules from your favourite sources
 

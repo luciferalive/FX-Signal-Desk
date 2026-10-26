@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FX Signal Desk - Trading panel</title>
+<style>
+  :root{--bg:#f6f7f9;--card:#fff;--ink:#14181f;--mute:#667085;--line:#e3e6ec;--buy:#12a37f;--sell:#d9433f;--wait:#7b8494;--warn:#b7791f;--blue:#2f6fed}
+  @media (prefers-color-scheme:dark){:root{--bg:#0e1116;--card:#161b22;--ink:#e7eaf0;--mute:#8b94a5;--line:#262d38;--buy:#2ecc9a;--sell:#ff6b66;--wait:#8b94a5;--warn:#f5b942;--blue:#6c9cff}}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:16px}
+  .wrap{max-width:1100px;margin:0 auto} h1{font-size:20px;margin:0 0 12px} h2{font-size:14px;margin:0 0 10px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px} .k{color:var(--mute);font-size:12px} .v{font-size:19px;font-weight:600}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-weight:700;font-size:13px;border:1px solid var(--line)}
+  .DEMO{color:var(--blue)} .LIVE{color:#fff;background:var(--sell);border-color:var(--sell)} .DISC{color:var(--wait)}
+  table{width:100%;border-collapse:collapse;font-size:13px} th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap} th{color:var(--mute);font-weight:600}
+  .wrapx{overflow-x:auto} .buy{color:var(--buy);font-weight:700} .sell{color:var(--sell);font-weight:700} .pos{color:var(--buy)} .neg{color:var(--sell)}
+  button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 12px;border-radius:8px;cursor:pointer;margin:0 6px 6px 0}
+  button.danger{border-color:var(--sell);color:var(--sell)} button:hover{border-color:var(--blue)} .note{color:var(--mute);font-size:12px}
+  .lock{border-color:var(--warn);color:var(--warn);background:transparent;padding:8px 10px;border:1px solid var(--warn);border-radius:8px;margin-bottom:10px}
+  .err{color:var(--sell)} .small{font-size:12px;color:var(--mute)}
+</style></head><body><div class="wrap">
+<h1>FX Signal Desk <span class="small">trading panel (this computer only)</span></h1>
+<div id="top" class="card"></div>
+<div id="lock"></div>
+<div class="card"><h2>Account</h2><div id="acct" class="grid"></div></div>
+<div class="card"><h2>Open positions</h2><div class="wrapx"><table id="pos"></table></div>
+  <p class="note">Trade details live here, not on the chart, so the chart stays clean. TP1/TP2/TP3 partial closes are done by the bot while it runs.</p></div>
+<div class="card"><h2>Controls</h2>
+  <button onclick="cmd('pause')">Pause new entries</button><button onclick="cmd('resume')">Resume new entries</button>
+  <button class="danger" onclick="cmd('stop','Stop ALL automated trading? Pending entry orders are cancelled. Open trades keep their stops.')">STOP ALL TRADING</button>
+  <button onclick="cmd('start')">Re-enable automated trading</button>
+  <button onclick="closeSel()">Close selected position</button>
+  <button class="danger" onclick="cmd('close_all','Close ALL open positions now?',true)">Close all positions</button>
+  <button class="danger" onclick="cmd('liquidate','EMERGENCY LIQUIDATION: close everything, cancel all orders and stop trading?',true)">Emergency liquidation</button>
+  <div id="msg" class="note"></div></div>
+<div class="card"><h2>Why the bot entered or rejected</h2><div class="wrapx"><table id="dec"></table></div></div>
+<div class="card"><h2>Trade history</h2><div class="wrapx"><table id="hist"></table></div></div>
+</div>
+<script>
+const TOKEN="__TOKEN__", LIVE=__LIVE__; let SEL=null, D=null;
+const $=s=>document.querySelector(s), f=(x,n=2)=>x==null?'-':Number(x).toFixed(n), cls=x=>x>0?'pos':x<0?'neg':'';
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function cmd(action,ask,destructive,args){
+  if(ask && !confirm(ask)) return;
+  if(LIVE && destructive && prompt('LIVE account. Type CLOSE to confirm')!=='CLOSE') return;
+  const res=await fetch('/api/cmd',{method:'POST',headers:{'X-Token':TOKEN,'Content-Type':'application/json'},body:JSON.stringify({action,args:Object.assign({confirm:!!destructive},args||{})})});
+  const j=await res.json(); $('#msg').textContent=j.queued?('Sent. '+j.note):('Not sent: '+(j.error||'')); }
+function closeSel(){ if(!SEL){$('#msg').textContent='Click a position row first.';return;} cmd('close','Close this position?',true,{position_id:SEL}); }
+function render(d){
+  D=d; const m=d.mode||'DISCONNECTED', c=m.startsWith('LIVE')?'LIVE':m.startsWith('DEMO')?'DEMO':'DISC';
+  $('#top').innerHTML=`<span class="badge ${c}">${esc(m)}${d.simulated?' (simulated)':''}</span> &nbsp; Broker: <b>${esc(d.broker||'-')}</b> &nbsp; Automated trading: <b>${esc(d.automated_trading||'-')}</b> &nbsp; Session: <b>${esc(d.session||'none')}</b> &nbsp; Open: <b>${d.open_positions||0}</b> &nbsp; Pending: <b>${d.pending_orders||0}</b>${d.error?`<div class="err">${esc(d.error)}</div>`:''}<div class="small">Updated ${esc(d.time||'')}</div>`;
+  $('#lock').innerHTML=d.lock?`<div class="lock"><b>RISK LOCK:</b> ${esc(d.lock.reason)} (since ${esc(d.lock.since)}). New entries are blocked; open trades are still monitored.</div>`:'';
+  const a=d.account, l=d.loss; $('#acct').innerHTML=a?[['Balance',f(a.balance)],['Equity',f(a.equity)],['Available margin',f(a.margin_free)],['Used margin',f(a.margin_used)],['Margin level',a.margin_level==null?'-':f(a.margin_level,0)+'%'],['Daily P&L',l?f(l.day_pnl):'-'],['Daily risk left',l?f(l.day_risk_left):'-'],['Currency',esc(a.currency)]].map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join(''):'<div class="note">No account data (not connected).</div>';
+  const P=d.positions||[]; $('#pos').innerHTML='<tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Entry</th><th>Price</th><th>SL</th><th>TP1</th><th>TP2</th><th>TP3</th><th>Volume left</th><th>Unrealized</th><th>Realized</th><th>Risk left</th><th>Open (min)</th></tr>'+(P.length?P.map(p=>`<tr data-id="${esc(p.position_id)}" style="cursor:pointer;${SEL===p.position_id?'background:rgba(47,111,237,.12)':''}"><td>${esc(p.symbol)}</td><td class="${p.direction==='BUY'?'buy':'sell'}">${p.direction}</td><td>${esc(p.strategy)}${p.managed?'':' (manual)'}</td><td>${p.entry}</td><td>${p.price??'-'}</td><td>${p.sl??'<b class=err>NONE</b>'}</td><td>${p.tp1??'-'}${p.tp_done>0?' ✓':''}</td><td>${p.tp2??'-'}${p.tp_done>1?' ✓':''}</td><td>${p.tp3??'-'}</td><td>${p.volume} / ${p.volume_original}</td><td class="${cls(p.unrealized)}">${f(p.unrealized)}</td><td class="${cls(p.realized)}">${f(p.realized)}</td><td>${f(p.remaining_risk)}</td><td>${p.minutes_open}</td></tr>`).join(''):'<tr><td colspan="14" class="note">No open positions.</td></tr>');
+  document.querySelectorAll('#pos tr[data-id]').forEach(r=>r.onclick=()=>{SEL=r.dataset.id;render(D)});
+  $('#hist').innerHTML='<tr><th>Symbol</th><th>Side</th><th>Strategy</th><th>Entry</th><th>Volume</th><th>Closed</th><th>Reason</th><th>P&L</th></tr>'+((d.history||[]).map(h=>`<tr><td>${esc(h.symbol)}</td><td class="${h.direction==='BUY'?'buy':'sell'}">${h.direction}</td><td>${esc(h.strategy)}</td><td>${h.entry}</td><td>${h.volume}</td><td>${esc((h.closed||'').slice(0,16).replace('T',' '))}</td><td>${esc(h.reason||'')}</td><td class="${cls(h.pnl)}">${f(h.pnl)}</td></tr>`).join('')||'<tr><td colspan="8" class="note">No closed trades yet.</td></tr>');
+}
+async function renderDec(){ const r=await fetch('/api/audit'); const rows=(await r.json()).filter(x=>x.event==='decision'||x.event==='arbitration'||x.event==='risk_lock').slice(0,25);
+  $('#dec').innerHTML='<tr><th>Time</th><th>Symbol</th><th>Side</th><th>Strategy</th><th>Result</th><th>Why</th></tr>'+(rows.map(x=>{const s=x.signal||{};return `<tr><td>${esc((x.time||'').slice(11,19))}</td><td>${esc(s.symbol||x.symbol||'')}</td><td>${s.side===1?'BUY':s.side===-1?'SELL':''}</td><td>${esc(s.strategy||x.strategy||'')}</td><td>${esc(x.decision||x.action||x.event)}</td><td style="white-space:normal">${esc((x.reasons||[x.why||x.reason||'']).join(' '))}${x.decision==='APPROVED'?esc('size '+x.volume+' lots, risk '+x.risk_money):''}</td></tr>`}).join('')||'<tr><td colspan="6" class="note">No decisions yet.</td></tr>'); }
+async function tick(){ try{ const r=await fetch('/api/status'); render(await r.json()); await renderDec(); }catch(e){ $('#top').innerHTML='<span class="err">Cannot reach the panel server.</span>'; } }
+tick(); setInterval(tick,5000);
+</script></body></html>
