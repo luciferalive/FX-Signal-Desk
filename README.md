@@ -74,7 +74,7 @@
 
 ## A day with the desk
 
-1. **Weekdays, every ~15 minutes:** GitHub downloads fresh prices and the news calendar.
+1. **Weekdays, every ~5 minutes:** GitHub downloads fresh prices and the news calendar.
 2. **The 1h chart plans** (bias and levels, never a trade by itself). The **15m** finds a setup that agrees. The **5m** confirms the entry.
 3. **A risk check decides.** Stop size, reward-to-risk, spread, volatility and session must pass, otherwise the answer is WAIT. A pass becomes a Telegram message with entry, SL, TP and the reasons.
 4. **You open the dashboard** to see the same trade drawn on the chart, with the news colour for that pair.
@@ -104,8 +104,8 @@
 
 | Workflow | What it does | When |
 |---|---|---|
-| `scan` | Looks for setups and sends Telegram alerts | Every ~15 min, Mon-Fri |
-| `dashboard` | Rebuilds and publishes the web dashboard | Every ~15 min, Mon-Fri |
+| `scan` | Looks for setups and sends Telegram alerts | Every ~5 min, Mon-Fri |
+| `dashboard` | Rebuilds and publishes the web dashboard | Every ~5 min, Mon-Fri |
 | `telegram-test` | Sends a test message to check your setup | Button |
 | `validate` | Quick replay on recent Yahoo data | Button |
 | `backtest-history` | Downloads years of Dukascopy data and replays the rules | Button |
@@ -117,7 +117,7 @@
 flowchart LR
     Y[Yahoo Finance prices] --> A
     F[Forex Factory calendar] --> A
-    subgraph GH[GitHub Actions - every ~15 min]
+    subgraph GH[GitHub Actions - every ~5 min]
         A[Analysis engine<br/>levels, FVG, SMAs, regime] --> W[1h plan > 15m setup > 5m entry]
         W --> S[13 strategies + confluence + risk check]
     end
@@ -134,14 +134,14 @@ flowchart LR
 2. Open the **Actions** tab. If asked, press **I understand my workflows, go ahead and enable them**.
 3. **Actions > dashboard > Run workflow**. After about 2 minutes your page is live at
    `https://luciferalive.github.io/FX-Signal-Desk/`. On a phone, add it to your home screen.
-4. It refreshes by itself about every 15 minutes on weekdays (GitHub can run it a little late).
+4. It refreshes by itself about every 5 minutes on weekdays (GitHub can run it a little late).
 
 ### Path 2: Telegram alerts
 1. In Telegram search **@BotFather**, send `/newbot`, pick a name and a username ending in `bot`. Copy the token.
 2. Open your new bot, press **Start**, and send `hi`.
 3. In a browser open `https://api.telegram.org/bot` + your token + `/getUpdates`. Copy the number after `"chat":{"id":`.
 4. Repo **Settings > Secrets and variables > Actions > New repository secret**. Add `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`. Names must match exactly. To alert more than one person, each person presses Start on the bot, then put all their chat IDs in `TELEGRAM_CHAT_ID` separated by commas (for example `111111,222222`).
-5. **Actions > telegram-test > Run workflow**. A message should arrive. After that, **scan** runs by itself every 15 minutes on weekdays.
+5. **Actions > telegram-test > Run workflow**. A message should arrive. After that, **scan** runs by itself every 5 minutes on weekdays.
 
 ### Path 3: test it on real history
 1. **Actions > backtest-history > Run workflow**.

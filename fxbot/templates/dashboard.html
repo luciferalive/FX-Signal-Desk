@@ -170,7 +170,7 @@ body { margin: 0; }
         <li>The blue line is the entry, the red area is the risk down to the stop, the green area is the reward up to TP1 and TP2.</li>
         <li>1H plan levels shows the swing highs and lows the 1-hour plan uses (violet). Choose which strategies count with the Strategies box under the chart.</li>
         <li>Drag to move, scroll or pinch to zoom, press Fit to come back to the latest candles. Times are India time.</li>
-        <li>The Analysis chart is a snapshot rebuilt every 15 minutes with all the overlays. Live price chart is TradingView's own live chart for the same pair and timeframe.</li>
+        <li>The Analysis chart is a snapshot rebuilt every ~5 minutes with all the overlays. Live price chart is TradingView's own live chart for the same pair and timeframe.</li>
         <li>A coloured dot on a pair or timeframe means the bot has a signal there (green buy, red sell, yellow if both).</li>
       </ul>
     </details>
@@ -641,7 +641,7 @@ function renderChips() {
   for (const p of IDX.pairs) for (const [k, x] of Object.entries(p.sig || {})) sigs.push({ s: p.symbol, k, x });
   $('#board').innerHTML = '<span class="lbl">Signals now</span>' + (sigs.length
     ? sigs.map(({ s, k, x }) => `<button class="sigchip" data-s="${esc(s)}" data-t="${k}"><b class="${x.side === 'BUY' ? 'buy' : 'sell'}">${x.side}</b> ${esc(s)} <span class="note">${esc(TFS[k] ? TFS[k].label : k)} · grade ${x.grade}</span></button>`).join('')
-    : '<span class="note">None right now. The bot checks every 15 minutes.</span>');
+    : '<span class="note">None right now. The bot checks every 5 minutes.</span>');
 }
 function renderPanels() {
   const an = AN, d = an.price_dec, f = (x) => Number(x).toFixed(d), s = SG;
@@ -814,7 +814,7 @@ async function selectPair(s, refit) {
 }
 const tick = () => {
   if (IDX) { const m = Math.round((Date.now() - new Date(IDX.generated).getTime()) / 60000);
-    $('#fresh').textContent = 'Analysis snapshot from ' + (m < 1 ? 'a moment' : m < 90 ? m + ' minutes' : Math.round(m / 60) + ' hours') + ' ago. It is rebuilt every 15 minutes. For prices that move tick by tick, use Live price chart.'; }
+    $('#fresh').textContent = 'Analysis snapshot from ' + (m < 1 ? 'a moment' : m < 90 ? m + ' minutes' : Math.round(m / 60) + ' hours') + ' ago. It is rebuilt every ~5 minutes. For prices that move tick by tick, use Live price chart.'; }
   renderNews();
 };
 $('#pairs').addEventListener('click', (e) => { const b = e.target.closest('button[data-s]'); if (b) selectPair(b.dataset.s, true); });
