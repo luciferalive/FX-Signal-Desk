@@ -18,18 +18,18 @@ _COMMON = {
                "mt5": {"suffix": "", "symbol_map": {}, "server_utc_offset_hours": None,
                        "commission_per_lot_round_turn": 0.0, "deviation_points": 20}},
     "risk": {
-        "risk_pct": 0.25,                 # % of equity risked per trade
-        "max_trade_risk_pct": 0.5,        # a single trade may never risk more than this
-        "max_total_risk_pct": 1.0,        # all open positions + pending orders together
-        "max_daily_loss_pct": 2.0,        # of start-of-day equity, realized + unrealized + costs
-        "max_weekly_loss_pct": 4.0,       # of start-of-week equity
-        "max_positions": 3,
+        "risk_pct": 1.0,                  # % of equity risked per trade (1% of 1,500 = 15)
+        "max_trade_risk_pct": 2.0,        # a single trade may never risk more than this
+        "max_total_risk_pct": 4.0,        # all open positions + pending orders together
+        "max_daily_loss_pct": 4.0,        # of start-of-day equity, realized + unrealized + costs
+        "max_weekly_loss_pct": 8.0,       # of start-of-week equity
+        "max_positions": 4,
         "max_positions_per_symbol": 1,
         "max_per_strategy_symbol": 1,
         "max_entries_per_symbol_day": 3,
-        "max_currency_risk_pct": 0.75,    # risk leaning the same way on one currency (long EUR, short USD, ...)
+        "max_currency_risk_pct": 2.0,     # risk leaning the same way on one currency (long EUR, short USD, ...)
         "correlation_groups": [["EURUSD", "GBPUSD"], ["AUDUSD", "NZDUSD"], ["USDCHF", "USDJPY"], ["EURJPY", "GBPJPY"]],
-        "min_rr": 1.5,
+        "min_rr": 0.8,                    # measured on the target actually used (TP1 is about 1R, so 1.5 would reject everything)
         "stop_atr_min": 0.4,
         "stop_atr_max": 4.0,
         "max_spread_to_risk": 0.15,       # spread may use at most 15% of the stop distance
@@ -44,7 +44,8 @@ _COMMON = {
         "max_quote_age_s": 15,            # a quote older than this is stale and never used for an order
     },
     "exits": {
-        "tp_fractions": [0.4, 0.3],       # share of the ORIGINAL volume closed at TP1, TP2; the last target closes the rest
+        "max_targets": 1,                 # 1 = TP1 only: the whole trade closes at TP1 (set at the broker, works even if the bot is off). 2 or 3 = use TP2 / TP3 too
+        "tp_fractions": [0.4, 0.3],       # only used when max_targets > 1: share of the ORIGINAL volume closed at TP1, TP2; the last target closes the rest
         "breakeven": {"enabled": False, "after": "tp1"},   # off by default, never automatic
         "trailing": {"mode": "none", "atr_mult": 2.0, "start_after": "tp1"},   # none | atr | swing | strategy
         "max_hold_hours": {"scalp": 6, "intraday": 30, "swing": None},         # swing trades are never cut by an intraday rule
@@ -53,7 +54,7 @@ _COMMON = {
     "sessions": {
         "broker_tz": "America/New_York",
         "rollover_hour": 17,
-        "allowed": ["London", "New York", "overlap"],   # Asian | London | New York | overlap ; None = any time
+        "allowed": None,                                # None = any time, the same as the Telegram signals. Or e.g. ["London", "New York", "overlap"]
         "strategy_sessions": {},                         # e.g. {"sessionbreak": ["London", "New York"]}
         "max_entries_per_session": 2,
         "hold_outside_session": ["swing", "intraday"],   # styles that may stay open after the session ends
@@ -69,6 +70,8 @@ _COMMON = {
         "block_after_min": 15,
         "existing_positions": "retain",   # retain | close
     },
+    # which signals the bot looks at. The default is the same set that goes to Telegram: scalp (1h > 15m > 5m workflow), swing and daily.
+    "signals": {"modes": ["scalp", "swing", "daily"], "min_grade": "B", "telegram": True, "max_age_s": 900},
     "cooldown_min": {"default": 60, "scalp": 30, "intraday": 60, "swing": 240},   # after a trade closes, per strategy+symbol
     "arbitration": {
         "price_tolerance_atr": 0.5,       # signals this close in price are one idea
@@ -87,6 +90,7 @@ LIVE = copy.deepcopy(_COMMON)
 LIVE["risk"].update({"risk_pct": 0.1, "max_trade_risk_pct": 0.25, "max_total_risk_pct": 0.5, "max_daily_loss_pct": 1.0,
                      "max_weekly_loss_pct": 2.0, "max_positions": 1, "max_entries_per_symbol_day": 1,
                      "max_currency_risk_pct": 0.25})
+LIVE["sessions"]["allowed"] = ["London", "New York", "overlap"]
 LIVE["exits"]["breakeven"] = {"enabled": False, "after": "tp1"}
 
 PROFILES = {"demo": DEMO, "live": LIVE}
@@ -124,7 +128,9 @@ def validate_config(cfg: dict) -> None:
         raise ValueError(f"risk_pct {r['risk_pct']} is above max_trade_risk_pct {r['max_trade_risk_pct']}")
     if r["max_trade_risk_pct"] > r["max_total_risk_pct"]:
         raise ValueError("max_trade_risk_pct is above max_total_risk_pct")
-    if not 0 <= sum(e["tp_fractions"]) < 1:
+    if e.get("max_targets", 1) not in (1, 2, 3):
+        raise ValueError("exits.max_targets must be 1, 2 or 3")
+    if e.get("max_targets", 1) > 1 and not 0 <= sum(e["tp_fractions"]) < 1:
         raise ValueError("tp_fractions must add up to less than 1 (the last target takes the rest)")
     if cfg["exits"]["on_stop_failure"] not in ("retry_then_close", "close", "alert_only"):
         raise ValueError("on_stop_failure must be retry_then_close, close or alert_only")

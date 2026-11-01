@@ -88,8 +88,10 @@ def parse_num(s) -> float | None:
 def pair_side(symbol: str, ccy: str, ccy_dir: int) -> str | None:
     """BUY or SELL on `symbol` if currency `ccy` rises (ccy_dir=+1) or falls (-1). None if the pair does not contain it.
     Gold and silver are priced in USD, so a stronger USD means SELL."""
-    s = symbol.upper().replace("/", "")
-    base, quote = s[:3], s[3:6]
+    from .symbols import is_oil, split
+    if is_oil(symbol):
+        return None       # oil does not follow one currency's data in a reliable way, so no if-then call is made for it
+    base, quote = split(symbol)
     if ccy == base:
         return "BUY" if ccy_dir > 0 else "SELL"
     if ccy == quote:
@@ -158,7 +160,7 @@ def reaction(candles: list, ev_ts: int, dec: int, t_offset: int = 0) -> dict | N
 
 UP_WORDS = ("rises", "rise", "gains", "gain", "climbs", "climb", "jumps", "rallies", "rally", "higher", "advances", "extends gains", "firmer", "surges", "recovers", "rebounds")
 DOWN_WORDS = ("falls", "fall", "drops", "drop", "slides", "slips", "slumps", "lower", "retreats", "declines", "dips", "weakens", "sinks", "tumbles", "pressured", "extends losses")
-NAMES = {"EURUSD": ("eur/usd", "eurusd", "euro "), "XAUUSD": ("xau/usd", "xauusd", "gold"), "XAGUSD": ("xag/usd", "silver")}
+NAMES = {"USOIL": ("wti", "crude", "oil "), "EURUSD": ("eur/usd", "eurusd", "euro "), "XAUUSD": ("xau/usd", "xauusd", "gold"), "XAGUSD": ("xag/usd", "silver")}
 
 
 def headline_tilt(symbol: str, headlines: list[dict] | None, max_pts: int = 10) -> tuple[int, list[dict]]:
@@ -208,6 +210,8 @@ def verdict(symbol: str, info: dict, events: list[dict], headlines: list[dict] |
     st = info.get("strength") or {}
     base, quote = symbol[:3], symbol[3:6]
     d = -st.get("USD", 0) if base in ("XAU", "XAG") else st.get(base, 0) - st.get(quote, 0)
+    if base == "USO":
+        d = 0                # no dollar-strength points for oil
     if abs(d) >= 0.03 and st:
         txt = (f"The US dollar has been {'weaker' if d > 0 else 'stronger'} lately, which usually {'helps' if d > 0 else 'hurts'} gold" if base in ("XAU", "XAG")
                else f"{base} has been {'stronger' if d > 0 else 'weaker'} than {quote} over 24 hours")
@@ -293,7 +297,7 @@ def build(events: list[dict], pairs: list[dict], candles: dict | None = None, no
     return dict(symbols=blocks, cautions=CAUTIONS, auto_trade=False)
 
 
-KEYWORDS = {"EURUSD": ("eur", "euro", "ecb", "fed", "dollar", "usd", "powell", "lagarde", "payroll", "cpi", "treasury"),
+KEYWORDS = {"USOIL": ("oil", "crude", "wti", "opec", "eia", "inventor", "brent", "barrel"), "EURUSD": ("eur", "euro", "ecb", "fed", "dollar", "usd", "powell", "lagarde", "payroll", "cpi", "treasury"),
             "XAUUSD": ("gold", "xau", "bullion", "fed", "dollar", "yield", "treasury", "powell", "inflation", "payroll")}
 
 

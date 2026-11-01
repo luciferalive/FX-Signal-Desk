@@ -25,7 +25,7 @@ DEFAULTS: dict = {
     },
     # typical retail spread in pips (used for the spread filter and the backtest); "default" covers the rest
     "spreads": {"default": 1.5, "EURUSD": 0.8, "USDJPY": 0.9, "GBPUSD": 1.1, "AUDUSD": 1.0, "USDCAD": 1.3,
-                "USDCHF": 1.3, "NZDUSD": 1.4, "EURJPY": 1.4, "GBPJPY": 2.0, "XAUUSD": 3.0, "XAGUSD": 3.0},
+                "USDCHF": 1.3, "NZDUSD": 1.4, "EURJPY": 1.4, "GBPJPY": 2.0, "XAUUSD": 3.0, "XAGUSD": 3.0, "USOIL": 4.0},
     # multi-timeframe workflow: 1h plans, 15m confirms the setup, 5m executes, 1m is optional precision
     "workflow": {"plan": "1h", "setup": "15m", "execute": "5m", "precision": "1m", "use_precision": False,
                  "setup_max_age_bars": 3, "chase_r": 0.5},

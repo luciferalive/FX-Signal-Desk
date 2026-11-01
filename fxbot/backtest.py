@@ -19,6 +19,8 @@ def pip_size(symbol: str) -> float:
     s = symbol.upper().replace("=X", "").replace("/", "")
     if "JPY" in s:
         return 0.01
+    if s in ("USOIL", "WTI", "WTIUSD", "XTIUSD", "CL=F"):
+        return 0.01      # one cent
     if s.startswith("XAU") or s == "GC=F":
         return 0.1
     if s.startswith("XAG"):

@@ -19,7 +19,7 @@
 ![Strategies](https://img.shields.io/badge/strategies-13-2ecc9a)
 ![Trading](https://img.shields.io/badge/auto--trading-DEMO%20first-f5b942)
 ![Brokers](https://img.shields.io/badge/brokers-XM%20(MT5)%20%C2%B7%20OANDA%20%C2%B7%20sim-8a7bff)
-![Pairs](https://img.shields.io/badge/pairs-30-2ecc9a)
+![Pairs](https://img.shields.io/badge/pairs-31-2ecc9a)
 ![Timeframes](https://img.shields.io/badge/timeframes-1m%E2%86%921M-2ecc9a)
 
 **A free, open-source forex signal desk. Every signal comes with entry, stop loss, take profit and the reasons behind it.**<br>
@@ -93,7 +93,7 @@
 
 ## Features
 
-- **30 instruments:** all 28 major, minor and cross pairs, plus gold (XAUUSD) and silver (XAGUSD). Edit `pairs.txt` to change the list.
+- **31 instruments:** all 28 major, minor and cross pairs, plus gold (XAUUSD), silver (XAGUSD) and US crude oil (USOIL). Edit `pairs.txt` to change the list.
 - **9 timeframes:** 1m, 5m, 15m, 30m, 1h, 4h, 1D, 1W, 1M.
 - **Everything on the chart:** fair value gaps, order blocks, premium / discount, today / previous day / previous week highs and lows, Asia and session ranges, daily / midnight / weekly opens, round-number handles, SMA 50 / 100 / 200.
 - **Killzones in New York time:** London, NY AM, NY PM.
@@ -197,10 +197,14 @@ python -m fxbot trade demo      # sizing, TP1/TP2/TP3, a spread rejection and a 
 **What it does for you**
 - Lot size from equity x risk% and the broker's own tick value; rounded down; rejected (never inflated) if the minimum lot is too big
 - Limits on total open risk, daily / weekly loss (persistent lock), positions, currency exposure, correlation, margin, spread, news, sessions and rollover
-- TP1 / TP2 / TP3 partial closes, optional breakeven and trailing; a stop is never widened or removed
+- One target (TP1) by default, set at the broker; optional TP2 / TP3 partial closes, breakeven and trailing. A stop is never widened or removed
+- The same signal goes to Telegram **and** to the risk manager, so a Telegram signal and a bot trade are the same thing; if a signal is not traded you get a message saying why
+- Demo risk is 1% of equity per trade by default (15 on a 1,500 account), easy to change
 - Order saved before sending, timeouts resolved by asking the broker (never a blind retry), full recovery after a restart
 - Manual trades you open yourself are counted in the risk and never touched
 - Buttons: pause, **STOP ALL**, close one / all, emergency liquidation (`python -m fxbot trade panel`)
+
+**Fast mode:** GitHub's free scheduler can run late, so for quick alerts and trades run the bot on an always-on laptop (checks every minute): **[guides/LAPTOP.md](guides/LAPTOP.md)**, with `start-bot.bat` and `install-autostart.bat` for Windows.
 
 Demo and live are separate profiles; live is stricter, disabled by default and needs a typed confirmation every run.
 Step-by-step XM demo setup, all limits, controls, failure handling and known limitations: **[guides/TRADING.md](guides/TRADING.md)**.

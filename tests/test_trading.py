@@ -34,7 +34,12 @@ def raises(exc, fn, *a, **k):
 
 
 def cfg_demo(**over):
+    """The original cautious numbers the behaviour tests were written against (the shipped demo defaults are bolder)."""
     cfg = tcfg.load("demo", path="/nonexistent")
+    cfg["risk"].update(risk_pct=0.25, max_trade_risk_pct=0.5, max_total_risk_pct=1.0, max_daily_loss_pct=2.0, max_weekly_loss_pct=4.0,
+                       max_positions=3, max_currency_risk_pct=0.75, min_rr=1.5)
+    cfg["exits"]["max_targets"] = 3
+    cfg["sessions"]["allowed"] = ["London", "New York", "overlap"]
     for k, v in over.items():
         sect, key = k.split("__")
         cfg[sect][key] = v
@@ -718,14 +723,37 @@ def test_close_selected_position_and_close_all(tmp_path):
 # =============================================================== demo versus live
 def test_demo_and_live_profiles_are_independent_and_live_is_stricter():
     d, l = tcfg.load("demo", path="/nonexistent"), tcfg.load("live", path="/nonexistent")
-    assert d["risk"]["risk_pct"] == 0.25 and d["risk"]["max_trade_risk_pct"] == 0.5 and d["risk"]["max_total_risk_pct"] == 1.0
-    assert d["risk"]["max_daily_loss_pct"] == 2.0 and d["risk"]["max_weekly_loss_pct"] == 4.0
-    assert d["risk"]["max_positions"] == 3 and d["risk"]["max_positions_per_symbol"] == 1 and d["risk"]["max_entries_per_symbol_day"] == 3
-    assert d["exits"]["tp_fractions"] == [0.4, 0.3]
+    assert d["risk"]["risk_pct"] == 1.0 and d["risk"]["max_trade_risk_pct"] == 2.0 and d["risk"]["max_total_risk_pct"] == 4.0
+    assert d["risk"]["max_daily_loss_pct"] == 4.0 and d["risk"]["max_weekly_loss_pct"] == 8.0
+    assert d["risk"]["max_positions"] == 4 and d["risk"]["max_positions_per_symbol"] == 1 and d["risk"]["max_entries_per_symbol_day"] == 3
+    assert d["exits"]["max_targets"] == 1 and d["sessions"]["allowed"] is None and d["signals"]["modes"] == ["scalp", "swing", "daily"]
     for k in ("risk_pct", "max_trade_risk_pct", "max_total_risk_pct", "max_daily_loss_pct", "max_weekly_loss_pct", "max_positions"):
         assert l["risk"][k] < d["risk"][k]
+    assert l["sessions"]["allowed"] == ["London", "New York", "overlap"]
     d["risk"]["risk_pct"] = 99
     assert tcfg.load("live", path="/nonexistent")["risk"]["risk_pct"] == 0.1 and tcfg.PROFILES["live"]["risk"]["risk_pct"] == 0.1
+
+
+def test_shipped_defaults_trade_tp1_only_with_about_one_percent_risk(tmp_path):
+    w = world(tmp_path, cfg=tcfg.load("demo", path="/nonexistent"))
+    p = prop()                                                   # a signal with TP1 and TP2
+    d = w.eng.risk.evaluate(p, ctx_for(w, p))
+    assert d.approved, d.reasons
+    eq = w.broker.account().equity
+    assert 0.007 * eq <= d.risk_money <= 0.0101 * eq             # about 1% of equity, rounded down to the lot step
+    w.box.append(p); w.step()
+    tr = w.eng.store.trades(open_only=True)
+    assert len(tr) == 1 and tr[0].tps == [200.975]               # TP2 is dropped: one target
+    pos = w.broker.positions()[0]
+    assert abs(pos.tp - 200.975) < 1e-9
+
+
+def test_one_target_means_the_whole_position_is_closed_at_tp1(tmp_path):
+    w = world(tmp_path, cfg=tcfg.load("demo", path="/nonexistent"))
+    w.box.append(prop()); w.step()
+    w.step(bid=201.00, ask=201.015)                              # price runs through TP1
+    assert not w.broker.positions()
+    assert w.eng.store.trades(open_only=True) == []
 
 
 def test_config_file_only_changes_the_profile_it_names(tmp_path):
@@ -1233,3 +1261,92 @@ def test_factory_builds_each_broker_from_config(tmp_path):
     for name, cls in (("sim", "SimBroker"), ("oanda", "OandaBroker"), ("xm", "MT5Broker"), ("mt5", "MT5Broker")):
         p.write_text(json.dumps({"broker": {"name": name}}))
         assert type(make_broker(tcfg.load("demo", str(p)))).__name__ == cls
+
+
+# ---------------------------------------------------------------- one signal: Telegram message AND trade candidate
+def _wf_result(ts, side="BUY"):
+    sg = dict(direction=side, instrument="GBPJPY", strategy="Trend pullback", strategy_key="trendpull", family="trend", timeframe="15m",
+              entry=200.815, entry_zone=[200.80, 200.83], stop_loss=200.656, risk_pips=15.9, take_profit=[200.974, 201.133], risk_reward=2.0,
+              regime="trending", confidence=70, explanation=["test"], invalidation="below 200.656", timestamp=ts.isoformat(),
+              position=dict(risk_amount=100, lots=0.2, exact=True))
+    return dict(signal=sg, state="SIGNAL", bias="BUY", stages={})
+
+
+def test_live_signals_send_the_telegram_text_and_return_the_same_trade_candidate(tmp_path, monkeypatch):
+    import time as _t
+    from fxbot.trading.cli import LiveSignals
+    import fxbot.workflow as wfm
+    now = pd.Timestamp.now(tz="UTC")
+    res = _wf_result(now - pd.Timedelta(minutes=5))
+    monkeypatch.setattr(wfm, "evaluate", lambda *a, **k: res)
+    sent = []
+    ls = LiveSignals(["GBPJPY"], ["scalp"], {"workflow": {}}, notify=sent.append, seen_path=str(tmp_path / "seen.json"))
+    ls.frames, ls._at = {"GBPJPY": {}}, _t.time()
+    out = ls(now)
+    assert len(sent) == 1 and "BUY GBPJPY" in sent[0] and "TP1" in sent[0]
+    assert len(out) == 1 and out[0].symbol == "GBPJPY" and out[0].side == 1 and out[0].tps == [200.974, 201.133]
+    assert len(ls(now)) == 1 and len(sent) == 1                  # announced once; the candidate is still offered (the risk manager de-duplicates)
+    ls2 = LiveSignals(["GBPJPY"], ["scalp"], {"workflow": {}}, notify=sent.append, seen_path=str(tmp_path / "seen.json"))
+    ls2.frames, ls2._at = {"GBPJPY": {}}, _t.time()
+    ls2(now); assert len(sent) == 1                              # a restart does not repeat the message
+
+
+def test_live_signals_do_not_announce_a_stale_setup(tmp_path, monkeypatch):
+    import time as _t
+    from fxbot.trading.cli import LiveSignals
+    import fxbot.workflow as wfm
+    now = pd.Timestamp.now(tz="UTC")
+    monkeypatch.setattr(wfm, "evaluate", lambda *a, **k: _wf_result(now - pd.Timedelta(hours=3)))
+    sent = []
+    ls = LiveSignals(["GBPJPY"], ["scalp"], {"workflow": {}}, notify=sent.append, seen_path=str(tmp_path / "seen.json"))
+    ls.frames, ls._at = {"GBPJPY": {}}, _t.time()
+    ls(now)
+    assert sent == []                                            # first start never floods Telegram with old setups
+
+
+def test_a_telegram_failure_never_stops_the_signals(tmp_path, monkeypatch):
+    import time as _t
+    from fxbot.trading.cli import LiveSignals
+    import fxbot.workflow as wfm
+    now = pd.Timestamp.now(tz="UTC")
+    monkeypatch.setattr(wfm, "evaluate", lambda *a, **k: _wf_result(now - pd.Timedelta(minutes=2)))
+
+    def boom(text):
+        raise RuntimeError("network down")
+    ls = LiveSignals(["GBPJPY"], ["scalp"], {"workflow": {}}, notify=boom, seen_path=str(tmp_path / "seen.json"))
+    ls.frames, ls._at = {"GBPJPY": {}}, _t.time()
+    assert len(ls(now)) == 1
+
+
+def test_a_rejected_signal_is_explained_once(tmp_path):
+    w = world(tmp_path)
+    w.box.append(prop(sl=200.90))                                 # invalid stop: will be rejected
+    w.step(); w.step(); w.step()
+    told = [m for m in w.sent if m.startswith("Not traded")]
+    assert len(told) == 1 and "GBPJPY" in told[0] and "stop-loss" in told[0]
+
+
+# ---------------------------------------------------------------- US oil
+def test_us_oil_is_a_supported_instrument():
+    from fxbot import symbols as sy
+    from fxbot.backtest import pip_size
+    from fxbot.data import yf_symbol
+    from fxbot.news import ccys_of
+    from fxbot.risk import pip_value_per_lot
+    assert yf_symbol("USOIL") == "CL=F" and yf_symbol("WTI") == "CL=F" and yf_symbol("EURUSD") == "EURUSD=X"
+    assert pip_size("USOIL") == 0.01 and sy.split("USOIL") == ("OIL", "USD") and sy.split("GBPJPY") == ("GBP", "JPY")
+    assert ccys_of("USOIL") == ["USD"] and pip_value_per_lot("USOIL", 71.0) == (10.0, False)
+    b = SimBroker(); b.connect()
+    sp = b.symbol_spec("USOIL")
+    assert sp.base_ccy == "OIL" and sp.quote_ccy == "USD" and sp.pip_size == 0.01 and sp.contract_size == 1000.0 and sp.tick_value > 0
+
+
+def test_us_oil_trade_is_sized_from_equity(tmp_path):
+    from fxbot.trading.risk_manager import Proposal
+    w = world(tmp_path, cfg=tcfg.load("demo", path="/nonexistent"))
+    w.broker.set_quote("USOIL", 70.98, 71.02, T0)
+    p = Proposal("oil1", "USOIL", 1, "trendpull", "trend", "intraday", 71.02, 70.52, [71.52, 72.02], T0, 65, None, None, [], ["trendpull"])
+    d = w.eng.risk.evaluate(p, ctx_for(w, p))
+    assert d.approved, d.reasons
+    eq = w.broker.account().equity
+    assert 0.5 * 0.01 * eq <= d.risk_money <= 0.0101 * eq

@@ -884,7 +884,7 @@ const IST = { timeZone: 'Asia/Kolkata' };
 const fmtDay = (ts) => new Date(ts * 1000).toLocaleDateString('en-IN', Object.assign({ weekday: 'short', day: 'numeric', month: 'short' }, IST));
 const fmtT = (ts) => new Date(ts * 1000).toLocaleTimeString('en-GB', Object.assign({ hour: '2-digit', minute: '2-digit', hour12: false }, IST));
 const relT = (sec) => { const m = Math.round(Math.abs(sec) / 60), t = m < 60 ? m + 'm' : m < 2880 ? Math.floor(m / 60) + 'h ' + (m % 60) + 'm' : Math.round(m / 1440) + 'd'; return sec >= 0 ? 'in ' + t : t + ' ago'; };
-const ccysOf = (s) => [s.slice(0, 3), s.slice(3, 6)].filter((c) => c !== 'XAU' && c !== 'XAG');
+const ccysOf = (s) => s === 'USOIL' ? ['USD'] : [s.slice(0, 3), s.slice(3, 6)].filter((c) => c !== 'XAU' && c !== 'XAG');
 let newsMode = '';
 function widget(el, src, cfg) {
   el.innerHTML = '';
@@ -929,7 +929,7 @@ function renderNews() {
 }
 
 /* ---------- live TradingView chart ---------- */
-const TVSYM = (s) => s.startsWith('XAU') ? 'OANDA:XAUUSD' : s.startsWith('XAG') ? 'OANDA:XAGUSD' : 'FX:' + s;
+const TVSYM = (s) => s === 'USOIL' ? 'TVC:USOIL' : s.startsWith('XAU') ? 'OANDA:XAUUSD' : s.startsWith('XAG') ? 'OANDA:XAGUSD' : 'FX:' + s;
 function renderLive() {
   widget($('#live'), 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js', {
     autosize: true, symbol: TVSYM(sym), interval: TFS[tf].tv, timezone: 'Asia/Kolkata', theme: isDark() ? 'dark' : 'light', style: '1',

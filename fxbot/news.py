@@ -92,8 +92,9 @@ def sample_news(now: pd.Timestamp | None = None) -> dict:
 def ccys_of(symbol: str) -> list[str]:
     """Currencies that move a pair: EURUSD -> EUR, USD. Gold and silver are priced in USD."""
     s = symbol.upper().replace("/", "")
-    base, quote = s[:3], s[3:6]
-    return [c for c in (base, quote) if c not in ("XAU", "XAG")] or ["USD"]
+    from .symbols import split
+    base, quote = split(s)
+    return [c for c in (base, quote) if c not in ("XAU", "XAG", "OIL")] or ["USD"]
 
 
 def upcoming_high(events: list[dict], symbol: str, now: pd.Timestamp | None = None, before_min: int = 90,

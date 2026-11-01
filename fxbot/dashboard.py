@@ -88,6 +88,8 @@ def live_frames(symbols: list[str]) -> dict:
 def _demo_base(sym: str) -> float:
     if sym.startswith("XAU"):
         return 2650.0
+    if sym in ("USOIL", "WTI"):
+        return 71.0
     if sym.endswith("JPY"):
         return 190.0 if sym.startswith(("GBP", "EUR")) else 150.0
     return {"GBPUSD": 1.30, "AUDUSD": 0.66, "NZDUSD": 0.60, "USDCAD": 1.36, "USDCHF": 0.88, "EURGBP": 0.84}.get(sym, 1.10)

@@ -37,9 +37,10 @@ CADJPY
 CADCHF
 CHFJPY
 
-# Metals
+# Metals and oil
 XAUUSD
 XAGUSD
+USOIL     # US crude oil (WTI futures, CL=F on Yahoo)
 
 # More you can switch on by removing the # (each pair adds a little time to every update)
 # USDINR

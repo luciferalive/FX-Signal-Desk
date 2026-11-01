@@ -19,6 +19,9 @@ def yf_symbol(s: str) -> str:
     s = s.upper().replace("/", "")
     if s.endswith(("=X", "=F")):
         return s
+    from .symbols import is_oil
+    if is_oil(s):
+        return "CL=F"
     if s.startswith("XAU"):
         return "GC=F"
     if s.startswith("XAG"):

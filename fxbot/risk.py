@@ -16,6 +16,9 @@ def pip_value_per_lot(symbol: str, price: float) -> tuple[float, bool]:
     return an approximation (flagged False): check your broker's calculator before sizing."""
     s = symbol.upper().replace("/", "")
     pip = pip_size(s)
+    from .symbols import is_oil
+    if is_oil(s):
+        return 10.0, False   # 1 lot is usually 1,000 barrels, so one cent = about 10 USD. Contract sizes differ by broker: check yours
     if s.startswith(("XAU", "XAG")):
         return (10.0 if s.startswith("XAU") else 50.0), True  # 100 oz and 5000 oz contracts
     if s.endswith("USD"):

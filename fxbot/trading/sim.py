@@ -21,7 +21,8 @@ DEFAULT_RATES = {"EURUSD": 1.10, "GBPUSD": 1.30, "AUDUSD": 0.66, "NZDUSD": 0.60,
 
 
 def _split(symbol: str) -> tuple[str, str]:
-    return symbol[:3], symbol[3:6]
+    from ..symbols import split
+    return split(symbol)
 
 
 class SimBroker(Broker):
@@ -87,12 +88,13 @@ class SimBroker(Broker):
             return self.specs[symbol]
         base, quote = _split(symbol)
         gold = symbol.startswith("XAU")
+        oil = base == "OIL"
         jpy = quote == "JPY"
-        contract = 100.0 if gold else 100_000.0
-        pip = 0.1 if gold else (0.01 if jpy else 0.0001)
-        tick = pip / 10 if not gold else 0.01
+        contract = 1000.0 if oil else 100.0 if gold else 100_000.0
+        pip = 0.01 if oil else 0.1 if gold else (0.01 if jpy else 0.0001)
+        tick = 0.01 if (gold or oil) else pip / 10
         tv = tick_value_from_rates(contract, tick, quote, self.currency, self.rates)
-        return SymbolSpec(symbol, base, quote, digits=3 if jpy else (2 if gold else 5), pip_size=pip, tick_size=tick,
+        return SymbolSpec(symbol, base, quote, digits=3 if jpy else (2 if (gold or oil) else 5), pip_size=pip, tick_size=tick,
                           contract_size=contract, volume_min=0.01, volume_max=50.0, volume_step=0.01, tick_value=tv,
                           commission_per_lot=self.commission_per_lot, min_stop_distance=pip * 2)
 
@@ -133,7 +135,7 @@ class SimBroker(Broker):
     def margin_required(self, symbol: str, volume: float, price: float) -> float:
         spec = self.symbol_spec(symbol)
         notional_base = volume * spec.contract_size
-        in_acc = convert_ccy(notional_base, spec.base_ccy, self.currency, self.rates) if not symbol.startswith("XAU") \
+        in_acc = convert_ccy(notional_base, spec.base_ccy, self.currency, self.rates) if spec.base_ccy not in ("XAU", "OIL") \
             else convert_ccy(notional_base * price, "USD", self.currency, self.rates)
         return in_acc / self.leverage
 

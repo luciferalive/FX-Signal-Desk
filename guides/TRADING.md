@@ -90,13 +90,14 @@ is **rejected**; the risk is never raised silently to fit a minimum.
 
 | Setting | DEMO | LIVE (stricter, set separately) |
 |---|---|---|
-| Risk per trade | 0.25% of equity | 0.10% |
-| Maximum risk of one trade | 0.5% | 0.25% |
-| Maximum total open risk (positions **and** pending orders, manual trades included) | 1.0% | 0.5% |
-| Maximum daily loss (from start-of-day equity, realized + unrealized + costs) | 2.0% | 1.0% |
-| Maximum weekly loss | 4.0% | 2.0% |
-| Simultaneous positions / per symbol / per strategy+symbol | 3 / 1 / 1 | 1 / 1 / 1 |
+| Risk per trade | 1.0% of equity (15 on 1,500) | 0.10% |
+| Maximum risk of one trade | 2.0% | 0.25% |
+| Maximum total open risk (positions **and** pending orders, manual trades included) | 4.0% | 0.5% |
+| Maximum daily loss (from start-of-day equity, realized + unrealized + costs) | 4.0% | 1.0% |
+| Maximum weekly loss | 8.0% | 2.0% |
+| Simultaneous positions / per symbol / per strategy+symbol | 4 / 1 / 1 | 1 / 1 / 1 |
 | Entries per symbol per day | 3 | 1 |
+| Sessions | any time | London, New York, overlap |
 
 Also checked on every trade: stop distance and side, take-profit side, reward-to-risk, stop in ATR terms, spread against the
 stop and against the pair's typical spread, volatility, stale quote, signal age, "not chasing", margin (the broker
@@ -118,7 +119,7 @@ changes would count as profit or loss.
 
 ## Multiple take-profit targets and stops
 
-A strategy can bring one, two or three targets. Defaults: TP1 closes 40% of the **original** volume, TP2 closes 30%, the
+**By default each trade has ONE target, TP1** (`exits.max_targets: 1`): the whole trade closes there and the stop-loss and TP1 are set at the broker. A strategy can bring one, two or three targets; with `max_targets` 2 or 3 the defaults are: TP1 closes 40% of the **original** volume, TP2 closes 30%, the
 last target closes the rest (with two targets: 40% then the rest). Partials are rounded down to the broker's step; a
 partial smaller than the minimum is **skipped**, and one that would leave less than the minimum is reduced or skipped.
 Only the last target (or a stop or a manual action) can close the whole position. A small account therefore may only
@@ -129,7 +130,7 @@ get a single target, on purpose.
 - The initial stop is **never widened** automatically and a stop is **never removed**. If a stop change fails the existing stop stays, you are alerted, and the policy `on_stop_failure` applies (`retry_then_close` by default: a missing stop is restored or the position is closed).
 - Swaps / financing are not added to the breakeven offset (brokers do not publish them in a form the bot can rely on).
 
-**Important:** TP1 and TP2 partial closes are done **by the bot while it is running**. At the broker only the stop-loss and
+**Important:** with more than one target, TP1 and TP2 partial closes are done **by the bot while it is running** (with the default single TP1 this does not apply). At the broker only the stop-loss and
 the *final* take-profit are attached. If the bot or your computer is off, trades are still protected by the stop and the final target, but not
 partially closed or trailed.
 

@@ -66,6 +66,7 @@ class TradingEngine:
         self.account_is_live: bool | None = None
         self.recent: deque = deque(maxlen=25)
         self._logged: set = set()
+        self._told_rejected: set = set()
 
     # ------------------------------------------------------------------ small helpers
     def _now(self) -> pd.Timestamp:
@@ -388,6 +389,9 @@ class TradingEngine:
             return []
         if not cands:
             return []
+        n_t = int(self.cfg["exits"].get("max_targets", 3))
+        for c in cands:      # TP1 only (the default): the trade has exactly one target, set at the broker
+            c.tps = sorted(c.tps, key=lambda x: c.side * x)[:n_t]
         props, notes = arbitrate(cands, self.cfg)
         for n in notes:
             key = ("arb", n["symbol"], n["action"], n["why"])
@@ -442,6 +446,13 @@ class TradingEngine:
                                 strategy=p.strategy, decision="REJECTED", reasons=reasons))
         if len(self._logged) > 5000:
             self._logged.clear()
+        # tell the person ONCE per signal why a signal they may have seen on Telegram was not traded
+        real = [r for r in reasons if "duplicate signal" not in r]
+        if real and p.signal_id not in self._told_rejected:
+            self._told_rejected.add(p.signal_id)
+            self._say(f"Not traded: {'BUY' if p.side > 0 else 'SELL'} {p.symbol} ({p.strategy}).\n" + "\n".join(r.replace("REJECTED: ", "") for r in real[:3]))
+            if len(self._told_rejected) > 2000:
+                self._told_rejected.clear()
 
     def _execute(self, p: Proposal, dec: Decision, ctx: Context, now) -> Trade | None:
         """The order manager: write the intent first, send, then confirm from the broker's answer."""

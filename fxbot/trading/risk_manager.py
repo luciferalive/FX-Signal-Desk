@@ -132,7 +132,8 @@ class RiskManager:
 
     @staticmethod
     def _currency_dirs(symbol: str, side: int) -> list[tuple[str, int]]:
-        base, quote = symbol[:3], symbol[3:6]
+        from ..symbols import split
+        base, quote = split(symbol)
         return [(base, side), (quote, -side)]
 
     def currency_risk(self, ctx: Context) -> dict[tuple[str, int], float]:

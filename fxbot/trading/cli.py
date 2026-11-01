@@ -32,15 +32,23 @@ def paths(profile: str, state_dir: str = STATE_DIR) -> dict:
 
 
 class LiveSignals:
-    """Candidates from the existing signal engine, refreshed at most once a minute. Free Yahoo data is delayed and is NOT
-    the broker's own price feed, so the risk manager re-checks every signal against the broker's current quote."""
+    """Candidates from the existing signal engine, refreshed at most once a minute. The SAME result that is sent to Telegram
+    is the one that becomes a trade candidate, so a Telegram signal and a bot trade are always the same signal.
+    Free Yahoo data is delayed and is NOT the broker's own price feed, so the risk manager re-checks every signal against
+    the broker's current quote."""
 
-    def __init__(self, symbols: list[str], modes: list[str], main_cfg: dict, refresh_s: int = 60):
+    def __init__(self, symbols: list[str], modes: list[str], main_cfg: dict, refresh_s: int = 60, min_grade: str = "B",
+                 notify=None, max_age_s: int = 900, seen_path: str = ".state/seen.json"):
         self.symbols, self.modes, self.main, self.refresh_s = symbols, modes, main_cfg, refresh_s
+        self.min_grade, self.notify, self.max_age_s, self.seen_path = min_grade, notify, max_age_s, seen_path
         self.frames: dict = {}
         self._at = 0.0
         self.events: list = []
         self._news_at = 0.0
+        try:
+            self.seen = set(json.load(open(seen_path))) if os.path.exists(seen_path) else set()
+        except Exception:
+            self.seen = set()
 
     def _load(self, now) -> None:
         from ..data import load_frames
@@ -56,9 +64,31 @@ class LiveSignals:
                        for s, fr in raw.items()}
         self._at = time.time()
 
+    def _first_time(self, key: str, age_s: float) -> bool:
+        """True once per signal. A signal that is already too old when first seen is remembered but not announced."""
+        if key in self.seen:
+            return False
+        self.seen.add(key)
+        try:
+            os.makedirs(os.path.dirname(self.seen_path) or ".", exist_ok=True)
+            json.dump(sorted(self.seen)[-500:], open(self.seen_path, "w"))
+        except Exception:
+            pass
+        return age_s <= self.max_age_s
+
+    def _tell(self, text: str) -> None:
+        if self.notify:
+            try:
+                self.notify(text)
+            except Exception as e:      # a Telegram problem must never stop trading
+                print(f"[telegram] {type(e).__name__}: {e}")
+
     def __call__(self, now):
         from ..analysis import analyze
         from ..modes import MODES
+        from ..news import upcoming_high
+        from ..scanner import GRADE_RANK, format_workflow
+        from ..analysis import format_text
         from ..workflow import evaluate
         from .signals import from_analysis, from_workflow
         if time.time() - self._at > self.refresh_s:
@@ -68,14 +98,40 @@ class LiveSignals:
             fr = self.frames.get(sym) or {}
             try:
                 if "scalp" in self.modes:
-                    out.append(from_workflow(evaluate(sym, fr, self.main, self.events, now)))
+                    r = evaluate(sym, fr, self.main, self.events, now)
+                    sg = r.get("signal")
+                    if sg:
+                        key = f"{sym}|workflow|{sg['strategy_key']}|{sg['direction']}|{sg['entry_zone']}"
+                        age = (pd.Timestamp(now) - pd.Timestamp(sg["timestamp"]).tz_convert("UTC")).total_seconds() if pd.Timestamp(sg["timestamp"]).tzinfo else 0
+                        if self._first_time(key, age):
+                            self._tell(format_workflow(r))
+                    out.append(from_workflow(r))
                 for m in self.modes:
                     if m == "scalp":
                         continue
                     spec = MODES[m]
                     df, htf = fr.get(spec["interval"]), fr.get(spec["htf"]) if spec["htf"] else None
-                    if df is not None and not df.empty:
-                        out.append(from_analysis(sym, analyze(sym, m, df, htf, spec["htf_name"])))
+                    if df is None or df.empty:
+                        continue
+                    an = analyze(sym, m, df, htf, spec["htf_name"])
+                    sg = an.get("signal")
+                    if not sg or GRADE_RANK[sg["grade"]] < GRADE_RANK[self.min_grade]:
+                        continue
+                    bar_s = {"4h": 14400, "1d": 86400}.get(spec["interval"], 900)
+                    t0 = pd.Timestamp(sg["time"])
+                    t0 = t0.tz_localize("UTC") if t0.tzinfo is None else t0.tz_convert("UTC")
+                    age = (pd.Timestamp(now) - t0).total_seconds()
+                    if age > bar_s + self.max_age_s:        # an old setup from an earlier candle: not a fresh signal
+                        continue
+                    key = f"{sym}|{m}|{sg['strategy']}|{sg['side']}|{sg['time']}"
+                    if self._first_time(key, 0):
+                        text = format_text(an)
+                        warn = upcoming_high(self.events, sym, now)
+                        self._tell(text + ("\n" + warn if warn else ""))
+                    p = from_analysis(sym, an)
+                    if p:
+                        p.time = pd.Timestamp(now)          # the freshness above replaces the scalp-sized age limit
+                        out.append(p)
             except Exception as e:
                 print(f"[signals] {sym}: {type(e).__name__}: {e}")
         return [p for p in out if p]
@@ -149,8 +205,10 @@ def cmd_run(a) -> int:
         armed = input("> ").strip() == LIVE_PHRASE
         print("LIVE trading ARMED for this run." if armed else "Not armed: the bot will only watch, no orders.")
     symbols = [s.upper() for s in (a.symbols or DEFAULT_SYMBOLS)]
-    modes = cfg.get("signals", {}).get("modes", ["scalp"])
-    sig = LiveSignals(symbols, modes, main)
+    sc = cfg.get("signals", {})
+    modes = sc.get("modes", ["scalp", "swing", "daily"])
+    sig = LiveSignals(symbols, modes, main, min_grade=sc.get("min_grade", "B"), notify=send if sc.get("telegram", True) else None,
+                      max_age_s=int(sc.get("max_age_s", 900)))
     eng = TradingEngine(broker, cfg, StateStore(p["state"]), AuditLog(p["audit"]), CommandQueue(p["commands"]),
                         signals=sig, events=sig.get_events, market=FrameMarket(lambda s: sig.frames.get(s, {}), main["workflow"]["setup"]),
                         notify=send, armed_live=armed, main_cfg=main, status_path=p["status"])

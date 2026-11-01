@@ -7,6 +7,26 @@ import urllib.error
 import urllib.request
 
 
+def load_dotenv(path: str = ".env") -> None:
+    """Read KEY=VALUE lines from a local .env file (git-ignored) so you can keep your Telegram token on your own computer
+    without Windows settings. Variables that are already set are never overwritten."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k, v = k.strip(), v.strip().strip('"').strip("'")
+                if k and v and k not in os.environ:
+                    os.environ[k] = v
+    except OSError:
+        pass
+
+
+load_dotenv()
+
+
 def _post(url: str, payload: dict):
     req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
     try:
