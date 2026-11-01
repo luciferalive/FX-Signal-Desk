@@ -204,7 +204,20 @@ python -m fxbot trade demo      # sizing, TP1/TP2/TP3, a spread rejection and a 
 - Manual trades you open yourself are counted in the risk and never touched
 - Buttons: pause, **STOP ALL**, close one / all, emergency liquidation (`python -m fxbot trade panel`)
 
-**Fast mode:** GitHub's free scheduler can run late, so for quick alerts and trades run the bot on an always-on laptop (checks every minute): **[guides/LAPTOP.md](guides/LAPTOP.md)**, with `start-bot.bat` and `install-autostart.bat` for Windows.
+### Start the bot on your laptop (Windows)
+
+What must be **installed** (once): MetaTrader 5 from XM and logged in to your demo account, and Python 3.12 (`python -m pip install MetaTrader5`).
+What must be **running** (always): the laptop (awake, plugged in, online), MetaTrader 5 (open and logged in) and the bot window (`start-bot.bat`).
+Your phone only needs Telegram to receive alerts. The bot sends messages; it does not read your chat.
+
+1. Download the newest ZIP from GitHub and copy your `trading.json` into the new folder.
+2. Copy `.env.example` to `.env` and put your Telegram bot token and chat id in it.
+3. On GitHub: Actions > scan > "..." > Disable workflow (so you do not get each signal twice, once late). Leave "dashboard" on.
+4. Double-click `install-autostart.bat` once (starts the bot at every login, stops sleep).
+5. Double-click `start-bot.bat`. A black window stays open and prints a line per cycle. Check with `python -m fxbot trade status` (it must say `broker=xm`).
+
+If the laptop is off or offline there are no new signals or trades; trades already open keep their stop-loss and TP1 at XM.
+Full guide, risk settings and troubleshooting: **[guides/LAPTOP.md](guides/LAPTOP.md)**.
 
 Demo and live are separate profiles; live is stricter, disabled by default and needs a typed confirmation every run.
 Step-by-step XM demo setup, all limits, controls, failure handling and known limitations: **[guides/TRADING.md](guides/TRADING.md)**.
