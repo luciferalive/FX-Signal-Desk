@@ -66,6 +66,7 @@ def _stamp(an: dict) -> dict:
         an["range"]["t"] = _t(an["range"]["t0"])
     for p in an["patterns"]:
         p["t"] = _t(p["time"])
+        p["ln"] = [[_t(x[0]), x[1], _t(y[0]), y[1]] for x, y in p.pop("lines", [])]
     if an["signal"]:
         an["signal"]["t"] = _t(an["signal"]["time"])
     for h in an.get("history", []):

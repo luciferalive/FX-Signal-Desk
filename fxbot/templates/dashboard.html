@@ -349,7 +349,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;',
 const TOGGLES = [['signals','Signals','--buy'],['active','Active trade','--accent'],['history','Past signals','--muted'],['zones','ICT / SMC zones','--buy'],
   ['levels','Support / resistance','--warn'],['trend','Trend (SMAs)','--c50'],['mtf','1H plan levels','--c100'],['sessions','Sessions','--kz-lon'],
   ['patterns','Patterns','--sell'],['minor','Minor levels','--muted']];
-const ON_DEFAULT = { signals: true, active: true, history: false, zones: true, levels: true, trend: true, mtf: false, sessions: true, patterns: false, minor: false };
+const ON_DEFAULT = { signals: true, active: true, history: false, zones: true, levels: true, trend: true, mtf: false, sessions: true, patterns: true, minor: false };
 let on = Object.assign({}, ON_DEFAULT), OFF = {};   /* OFF = strategies the user switched off */
 let IDX = null, NEWS = null, PD = null, TFS = {}, TFLIST = [], TF = null, SG = null, HIDDEN = null, HITS = [];
 let sym = null, tf = '15m', view = 'chart', themePref = 'dark';
@@ -526,10 +526,11 @@ function draw() {
       const txt = narrow ? L.name : L.name + ' ' + f(L.price);
       return { x: Math.max(xa, 0) + 3, y: yy - 8, w: (txt.length + 1) * 6.6, text: txt, color: col };
     };
-    const majors = [], minors = [];
-    for (const L of AN.levels) { if (L.kind === 'handle' && L.name === 'Half-handle') continue; (L.kind === 'liquidity' ? majors : minors).push(L); }
+    const majors = [], minors = [], srs = [];
+    for (const L of AN.levels) { if (L.kind === 'handle' && L.name === 'Half-handle') continue; (L.kind === 'liquidity' ? majors : L.kind === 'sr' ? srs : minors).push(L); }
     const near = (a, b) => Math.abs(a.dist_pips) - Math.abs(b.dist_pips);
     if (on.levels) { let k = 0; for (const L of majors.sort(near)) { const lab = line(L, alpha(T.warn, 0.9), [], 1.2); if (lab && k < (narrow ? 4 : 8)) { labels.push(lab); k++; } } }
+    if (on.levels) { let k = 0; for (const L of srs.sort(near)) { const lab = line(L, alpha(L.name.startsWith('Support') ? T.buy : T.sell, 0.75), [7, 4], 1.4); if (lab && k < (narrow ? 2 : 4)) { labels.push(lab); k++; } } }
     if (on.minor && !narrow) {
       let k = 0;
       for (const L of minors.sort(near)) {
@@ -633,10 +634,23 @@ function draw() {
 
   /* pattern markers */
   if (on.patterns) {
+    /* pattern trend lines / necklines */
+    ctx.lineWidth = 1.4;
+    for (const p of AN.patterns) {
+      if (!p.t) continue;
+      const col = alpha(p.side > 0 ? T.buy : p.side < 0 ? T.sell : T.warn, 0.85);
+      ctx.strokeStyle = col; ctx.setLineDash(p.status === 'forming' ? [6, 4] : []);
+      if (p.ln && p.ln.length) {
+        for (const q of p.ln) { ctx.beginPath(); ctx.moveTo(x(idxOf(q[0])), y(q[1])); ctx.lineTo(x(idxOf(q[2])), y(q[3])); ctx.stroke(); }
+      } else if (p.neckline) {
+        const yy = y(p.neckline); ctx.beginPath(); ctx.moveTo(x(idxOf(p.t)), yy); ctx.lineTo(plotW, yy); ctx.stroke();
+      }
+    }
+    ctx.setLineDash([]);
     const used = {};
     const short = (s) => s.replace('Liquidity sweep of ', 'Sweep ').replace('Hammer / bullish pin bar', 'Pin bar').replace('Shooting star / bearish pin bar', 'Pin bar')
       .replace('Bullish Engulfing', 'Engulfing').replace('Bearish Engulfing', 'Engulfing').replace('Inverse Head & Shoulders', 'Inv H&S').replace('Head & Shoulders', 'H&S')
-      .replace('Ascending Triangle', 'Asc triangle').replace('Descending Triangle', 'Desc triangle');
+      .replace('Ascending Triangle', 'Asc triangle').replace('Descending Triangle', 'Desc triangle').replace('Rectangle Breakout', 'Range break').replace('Rectangle (range)', 'Range').replace(' Channel', ' chan.').replace('Three White Soldiers', '3 soldiers').replace('Three Black Crows', '3 crows').replace('Dark Cloud Cover', 'Dark cloud');
     for (const p of AN.patterns) {
       if (!p.side || !p.t) continue;
       const i = idxOf(p.t); if (i < i0 || i > i1) continue;

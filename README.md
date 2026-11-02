@@ -109,6 +109,7 @@
 - **Live chart tab:** the free TradingView widget for real-time prices.
 - **Telegram alerts** with de-duplication, so you do not get the same signal twice.
 - **TradingView indicator** (`pine/fx_signal_desk.pine`) for true live signals inside TradingView.
+- **Chart patterns** (bot, dashboard and TradingView): support / resistance zones, double and triple tops / bottoms, head & shoulders (and inverse), rising / falling wedges, ascending / descending / symmetrical triangles, bull / bear flags, rectangles with breakouts, channels, and candle patterns (engulfing, pin bar, morning / evening star, harami, piercing line, dark cloud, three soldiers / crows, tweezers, doji, inside bar). A confirmed breakout with a clear stop and target can become a "Pattern: ..." signal; the rest are shown as context. They are rule based, not proven to make money. Optional TradingView version: [`pine/fx_patterns.pine`](pine/fx_patterns.pine).
 - **One-click backtest on real history:** downloads up to 3 years from Dukascopy and replays the rules with no look-ahead, spread, slippage and commission included, a conservative stop-first rule when one candle hits both, and a development / evaluation split.
 - **Light and dark themes.**
 - **Free hosting:** GitHub Pages and GitHub Actions. Nothing to pay for.
@@ -167,6 +168,7 @@ flowchart LR
 2. Paste the contents of [`pine/fx_signal_desk.pine`](pine/fx_signal_desk.pine) and press **Add to chart**.
 3. For alerts: **Add alert**, choose **FX Signal Desk**, condition **Any alert() function call**.
 4. TradingView has its own Economic Calendar for news.
+5. For the chart patterns, add a second indicator the same way with [`pine/fx_patterns.pine`](pine/fx_patterns.pine).
 
 ## Automated trading (optional, DEMO first)
 

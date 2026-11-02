@@ -13,6 +13,7 @@ from .backtest import pip_size, trade_outcome
 from .indicators import atr, ema, pivot_idx
 from .config import load as load_config, enabled_strategies
 from .modes import MODES
+from .patterns import more_patterns, sr_levels
 from .regime import current_regime
 from .risk import dedupe, invalidated, validate
 from .sessions import IST, NY, day_levels, session_labels, silver_bullet_now, window_mask
@@ -130,8 +131,14 @@ def key_levels(df: pd.DataFrame, symbol: str, n: int = 3, intraday: bool = True)
             big = abs((p / (100 * pip)) - round(p / (100 * pip))) < 1e-6
             add("Handle" if big else "Half-handle", p, "handle")
 
+    try:
+        for z in sr_levels(df, n):
+            out.append(z)
+    except Exception:
+        pass
+
     # merge levels that sit on the same price (keep the most meaningful name)
-    prio = {"liquidity": 0, "session": 1, "open": 2, "swing": 3, "day": 4, "handle": 5}
+    prio = {"liquidity": 0, "session": 1, "open": 2, "sr": 2.5, "swing": 3, "day": 4, "handle": 5}
     uniq: list[dict] = []
     for L in sorted(out, key=lambda x: prio.get(x["kind"], 9)):
         if not any(abs(L["price"] - u["price"]) < 0.5 * pip for u in uniq):
@@ -273,6 +280,16 @@ def detect_patterns(df: pd.DataFrame, levels: list[dict], n: int = 3) -> list[di
 
     for name, side in candle_patterns(df, a):
         pats.append(dict(name=name, side=side, status="confirmed", time=t(last), brk_recent=True, note="last closed candle"))
+
+    # more patterns (triple top / bottom, wedges, flags, rectangle, channel, extra candles): see patterns.py
+    try:
+        extra = more_patterns(df, n)
+    except Exception:  # a pattern bug must never stop the signals
+        extra = []
+    names = {p["name"] for p in extra}
+    pats = [p for p in pats if not (p["name"] == "Double Top" and "Triple Top" in names)
+            and not (p["name"] == "Double Bottom" and "Triple Bottom" in names)]
+    pats += extra
 
     # liquidity sweeps on the last 3 bars
     h, l, c = (df[k].to_numpy() for k in ("high", "low", "close"))
