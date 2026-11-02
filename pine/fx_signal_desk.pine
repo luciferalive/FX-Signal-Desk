@@ -5,7 +5,7 @@
 // Clean by default: one small arrow per signal (hover for the details), only the newest trade is drawn in full, nearby
 // level names never overlap, and every layer has a switch in the settings. Shows: killzones (New York time), previous day / week highs and lows, Asia range, today high / low, daily /
 // midnight / weekly opens, SMA 50 / 100 / 200, fair value gaps, liquidity sweeps and trade signals with entry,
-// stop loss, TP1, TP2 and a confirmation score. News is not available inside Pine: use TradingView's own
+// stop loss, TP1 (TP2 optional; TP1-only is the default, like the bot) and a confirmation score. News is not available inside Pine: use TradingView's own
 // Economic Calendar (red = high impact) or the FX Signal Desk dashboard.
 indicator("FX Signal Desk", shorttitle="FX Desk", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500, max_bars_back=500)
 
@@ -17,13 +17,14 @@ G4 = "4. Fair value gaps"
 G5 = "5. Sessions (New York time)"
 
 showSig  = input.bool(true, "Show signal markers (one small arrow per signal, hover for details)", group=G1)
-showAct  = input.bool(true, "Show the active trade (entry, stop loss, TP1, TP2)", group=G1)
+showAct  = input.bool(true, "Show the active trade (entry, stop loss, TP1 and optional TP2)", group=G1)
 showHist = input.bool(false, "Keep past signal markers", group=G1)
 maxHist  = input.int(10, "Past markers to keep", minval=1, maxval=100, group=G1)
 dupBars  = input.int(12, "Ignore the same signal repeating within (bars)", minval=0, maxval=100, group=G1)
 stratSel = input.string("Both", "Strategy", options=["Both", "ICT sweep + FVG", "Trend pullback"], group=G1)
 minScore = input.int(5, "Minimum confirmations (out of 9)", minval=1, maxval=9, group=G1)
-rrInp    = input.float(2.0, "Reward to risk for TP2", minval=1.0, step=0.5, group=G1)
+tp1Only  = input.bool(true, "Trade TP1 only (same as the bot: the whole trade closes at TP1)", group=G1)
+rrInp    = input.float(2.0, "Reward to risk for TP2 (used only when TP1-only is off)", minval=1.0, step=0.5, group=G1)
 dispAtr  = input.float(0.9, "ICT displacement candle size (x ATR)", minval=0.3, step=0.1, group=G1)
 sigBars  = input.int(25, "Trade box width (bars)", minval=5, maxval=200, group=G1)
 htfInp   = input.string("Auto", "Higher timeframe for trend", options=["Auto", "15", "60", "240", "D", "W", "M"], group=G1)
@@ -352,11 +353,13 @@ bool against = false
 string failed = ""
 float sTp1 = na
 float sTp2 = na
+float sTpEnd = na
 if sSide != 0
     bool buy = sSide == 1
     float rsk0 = math.abs(sEntry - sSl)
     sTp1 := sEntry + sSide * rsk0
     sTp2 := sEntry + sSide * rrInp * rsk0
+    sTpEnd := tp1Only ? sTp1 : sTp2
     bool c1 = buy ? trendUp : trendDn
     bool c2 = buy ? htfUp : htfDn
     bool c3 = buy ? (close > sma200 and sma50 > sma200) : (close < sma200 and sma50 < sma200)
@@ -412,23 +415,25 @@ if sFire
     int x2 = bar_index + sigBars
     string side = sSide == 1 ? "BUY" : "SELL"
     string pr = str.tostring(sEntry, format.mintick)
-    string det = side + " - " + sStrat + "\nGrade " + grade + " (" + str.tostring(score) + "/9)\nEntry " + pr + " (" + sType + ")\nSL " + str.tostring(sSl, format.mintick) + "  " + str.tostring(math.abs(sEntry - sSl) / pipSz, "#.#") + " pips\nTP1 " + str.tostring(sTp1, format.mintick) + "\nTP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#") + "\nMissing: " + failed
+    string det = side + " - " + sStrat + "\nGrade " + grade + " (" + str.tostring(score) + "/9)\nEntry " + pr + " (" + sType + ")\nSL " + str.tostring(sSl, format.mintick) + "  " + str.tostring(math.abs(sEntry - sSl) / pipSz, "#.#") + " pips\nTP1 " + str.tostring(sTp1, format.mintick) + (tp1Only ? "  (only target)" : "\nTP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#")) + "\nMissing: " + failed
     if showAct
         f_clearActive()   // only the newest trade is drawn in full, so signals never pile up
-        array.push(actBox, box.new(left=bar_index, top=math.max(sEntry, sTp2), right=x2, bottom=math.min(sEntry, sTp2), border_color=color.new(color.green, 80), bgcolor=color.new(color.green, 93)))
+        array.push(actBox, box.new(left=bar_index, top=math.max(sEntry, sTpEnd), right=x2, bottom=math.min(sEntry, sTpEnd), border_color=color.new(color.green, 80), bgcolor=color.new(color.green, 93)))
         array.push(actBox, box.new(left=bar_index, top=math.max(sEntry, sSl), right=x2, bottom=math.min(sEntry, sSl), border_color=color.new(color.red, 80), bgcolor=color.new(color.red, 93)))
         array.push(actLine, line.new(bar_index, sEntry, x2, sEntry, xloc=xloc.bar_index, color=color.new(color.blue, 0), width=2))
         array.push(actLine, line.new(bar_index, sSl, x2, sSl, xloc=xloc.bar_index, color=color.new(color.red, 0), width=1))
         array.push(actLine, line.new(bar_index, sTp1, x2, sTp1, xloc=xloc.bar_index, color=color.new(color.green, 40), style=line.style_dashed))
-        array.push(actLine, line.new(bar_index, sTp2, x2, sTp2, xloc=xloc.bar_index, color=color.new(color.green, 0), width=2))
+        if not tp1Only
+            array.push(actLine, line.new(bar_index, sTp2, x2, sTp2, xloc=xloc.bar_index, color=color.new(color.green, 0), width=2))
         array.push(actLbl, label.new(x=x2, y=sEntry, text="ENTRY " + pr, xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.blue, 15), textcolor=color.white, size=size.small))
         array.push(actLbl, label.new(x=x2, y=sSl, text="SL " + str.tostring(sSl, format.mintick) + "  " + str.tostring(math.abs(sEntry - sSl) / pipSz, "#.#") + "p", xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.red, 15), textcolor=color.white, size=size.small))
-        if math.abs(sTp2 - sTp1) > 0.7 * atr14   // skip TP1 text when it would sit on top of another label
+        if tp1Only or math.abs(sTp2 - sTp1) > 0.7 * atr14   // skip TP1 text when it would sit on top of another label
             array.push(actLbl, label.new(x=x2, y=sTp1, text="TP1 " + str.tostring(sTp1, format.mintick), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 40), textcolor=color.white, size=size.small))
-        array.push(actLbl, label.new(x=x2, y=sTp2, text="TP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 15), textcolor=color.white, size=size.small))
+        if not tp1Only
+            array.push(actLbl, label.new(x=x2, y=sTp2, text="TP2 " + str.tostring(sTp2, format.mintick) + "  RR " + str.tostring(rrInp, "#.#"), xloc=xloc.bar_index, style=label.style_label_left, color=color.new(color.green, 15), textcolor=color.white, size=size.small))
         actSide := sSide
         actSl := sSl
-        actTp2 := sTp2
+        actTp2 := sTpEnd
     if showSig
         if not showHist
             for mk in sigMk
@@ -439,7 +444,7 @@ if sFire
         while array.size(sigMk) > maxHist
             label.delete(array.get(sigMk, 0))
             array.remove(sigMk, 0)
-    alert(side + " " + syminfo.ticker + " " + timeframe.period + " | " + sStrat + " | grade " + grade + " (" + str.tostring(score) + "/9) | entry " + pr + " (" + sType + ") | SL " + str.tostring(sSl, format.mintick) + " | TP1 " + str.tostring(sTp1, format.mintick) + " | TP2 " + str.tostring(sTp2, format.mintick) + " | Not financial advice", alert.freq_once_per_bar_close)
+    alert(side + " " + syminfo.ticker + " " + timeframe.period + " | " + sStrat + " | grade " + grade + " (" + str.tostring(score) + "/9) | entry " + pr + " (" + sType + ") | SL " + str.tostring(sSl, format.mintick) + " | TP1 " + str.tostring(sTp1, format.mintick) + " | " + (tp1Only ? "TP1 only" : "TP2 " + str.tostring(sTp2, format.mintick)) + " | Not financial advice", alert.freq_once_per_bar_close)
 
 alertcondition(sFire and sSide == 1, "FX Desk BUY signal", "FX Desk BUY {{ticker}} {{interval}}")
 alertcondition(sFire and sSide == -1, "FX Desk SELL signal", "FX Desk SELL {{ticker}} {{interval}}")
