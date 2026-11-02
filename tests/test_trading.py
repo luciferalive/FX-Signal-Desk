@@ -1283,7 +1283,7 @@ def test_live_signals_send_the_telegram_text_and_return_the_same_trade_candidate
     ls = LiveSignals(["GBPJPY"], ["scalp"], {"workflow": {}}, notify=sent.append, seen_path=str(tmp_path / "seen.json"))
     ls.frames, ls._at = {"GBPJPY": {}}, _t.time()
     out = ls(now)
-    assert len(sent) == 1 and "BUY GBPJPY" in sent[0] and "TP1" in sent[0]
+    assert len(sent) == 1 and "BUY  GBPJPY" in sent[0] and "TP1" in sent[0]
     assert len(out) == 1 and out[0].symbol == "GBPJPY" and out[0].side == 1 and out[0].tps == [200.974, 201.133]
     assert len(ls(now)) == 1 and len(sent) == 1                  # announced once; the candidate is still offered (the risk manager de-duplicates)
     ls2 = LiveSignals(["GBPJPY"], ["scalp"], {"workflow": {}}, notify=sent.append, seen_path=str(tmp_path / "seen.json"))

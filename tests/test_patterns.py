@@ -87,3 +87,16 @@ def test_flat_noise_gives_no_patterns():
     rng = np.random.default_rng(1)
     df = mk(1.10 + np.cumsum(rng.normal(0, 0.0002, 200)) * 0)
     assert P.more_patterns(df) == [] or all(p["side"] == 0 for p in P.more_patterns(df))
+
+
+def test_telegram_card_is_line_by_line_with_both_targets_and_no_reasons():
+    from fxbot.alerts import card
+    t = card(symbol="EURUSD", side="BUY", strategy="ICT sweep + FVG", grade="A", score_text="score 83/100", frames="15m setup",
+             ts="2026-11-02T05:15:00+00:00", bar_min=5, entry=1.1523, entry_type="limit", sl=1.1506, tp1=1.154, tp2=1.1557, dec=5,
+             expiry_bars=8)
+    for need in ("BUY  EURUSD", "Grade A", "IST", "UTC", "NY", "Session", "ENTRY TYPE: LIMIT", "SL ", "TP1 ", "TP2 ", "WHEN TO TAKE IT", "Valid until"):
+        assert need in t, need
+    assert "Why" not in t and t.count("\n") > 15
+    m = card(symbol="EURUSD", side="SELL", strategy="x", grade="B", score_text="s", frames="f", ts="2026-11-02T05:15:00+00:00",
+             bar_min=5, entry=1.1523, entry_type="market", sl=1.1540, tp1=1.1506, tp2=1.1489, dec=5)
+    assert "MARKET" in m and "Skip it if price is already beyond 1.15145" in m

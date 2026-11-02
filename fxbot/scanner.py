@@ -98,21 +98,6 @@ def scan(symbols=None, modes=None, notify=True, min_grade="B", state_path=".stat
 
 
 def format_workflow(r: dict) -> str:
-    """Telegram text for a final BUY / SELL from the multi-timeframe workflow."""
-    sg = r["signal"]
-    icon = "🟢" if sg["direction"] == "BUY" else "🔴"
-    tp1, tp2 = sg["take_profit"]
-    pos = sg["position"]
-    lines = [
-        f"{icon} {sg['direction']} {sg['instrument']} - {sg['strategy']}",
-        sg["timeframe"],
-        f"Entry: {sg['entry']}  (zone {sg['entry_zone'][0]} - {sg['entry_zone'][1]})",
-        f"SL: {sg['stop_loss']}  ({sg['risk_pips']} pips)",
-        f"TP1 (1R): {tp1}   TP2: {tp2}   RR {sg['risk_reward']}",
-        f"Regime: {sg['regime']} | confluence score {sg['confidence']}/100 (evidence, not a win chance)",
-        "Why:", *[f"• {x}" for x in sg["explanation"]],
-        f"Invalidation: {sg['invalidation']}",
-        f"Size for {pos['risk_amount']} risk: about {pos['lots']} lots" + ("" if pos["exact"] else " (approx. - check your broker calculator)"),
-        "Not financial advice. Signals are analysis, not guaranteed trades.",
-    ]
-    return "\n".join(lines)
+    """Telegram card for a final BUY / SELL from the multi-timeframe workflow (see alerts.py)."""
+    from .alerts import from_workflow
+    return from_workflow(r)

@@ -199,8 +199,8 @@ python -m fxbot trade demo      # sizing, TP1/TP2/TP3, a spread rejection and a 
 **What it does for you**
 - Lot size from equity x risk% and the broker's own tick value; rounded down; rejected (never inflated) if the minimum lot is too big
 - Limits on total open risk, daily / weekly loss (persistent lock), positions, currency exposure, correlation, margin, spread, news, sessions and rollover
-- One target (TP1) by default, set at the broker; optional TP2 / TP3 partial closes, breakeven and trailing. A stop is never widened or removed
-- The same signal goes to Telegram **and** to the risk manager, so a Telegram signal and a bot trade are the same thing; if a signal is not traded you get a message saying why
+- The bot **trades** one target (TP1) by default, set at the broker, while Telegram and TradingView **show** both TP1 and TP2; optional TP2 / TP3 partial closes, breakeven and trailing. A stop is never widened or removed
+- Telegram signals are a clean line-by-line card: pair, time (IST, UTC, New York), session, entry type (market / limit), entry, SL, TP1, TP2, grade, when to take it and until when. The same signal goes to Telegram **and** to the risk manager, so a Telegram signal and a bot trade are the same thing; if a signal is not traded you get a message saying why
 - Demo risk is 1% of equity per trade by default (15 on a 1,500 account), easy to change
 - Order saved before sending, timeouts resolved by asking the broker (never a blind retry), full recovery after a restart
 - Manual trades you open yourself are counted in the risk and never touched

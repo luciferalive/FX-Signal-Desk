@@ -23,6 +23,8 @@ from .news import upcoming_high
 from .regime import current_regime
 from .risk import dedupe, invalidated, position_size, validate
 from .sessions import session_labels
+
+BAR_MIN_WF = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440}
 from .strategies import STRATEGIES, FAMILIES
 
 NEUTRAL_OK = {"mean_reversion", "price_action", "ict"}  # families allowed when the 1h has no clear direction
@@ -252,6 +254,8 @@ def evaluate(symbol: str, frames: dict, cfg: dict | None = None, events: list | 
         risk_reward=round(rr_final, 2), risk_pips=round(risk / pip_size(symbol), 1),
         confidence=best["score"], confidence_note="confluence score (how much independent evidence lines up), not a win probability",
         regime=reg15["label"], timestamp=pd.Timestamp(df_e.index[-1]).isoformat(), invalidation=sig.invalidation,
+        entry_type=sig.entry_type, expiry=int(getattr(sig, "expiry", 0) or 0), dec=dec,
+        exec_min=BAR_MIN_WF.get(tf["execute"], 5), setup_min=BAR_MIN_WF.get(tf["setup"], 15),
         explanation=expl, position=size, rejection_reasons=out["rejected"][:5])
     out["signal"] = signal
     out["setup"] = dict(strategy=sig.strategy, direction=sig.direction, entry=sig.entry, sl=sig.sl, tp=sig.tp)

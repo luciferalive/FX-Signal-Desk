@@ -560,24 +560,6 @@ def format_text(an: dict) -> str:
         lines = [f"⚪ NO TRADE - {head}", f"Trend: {an['trend']['label']} ({an['trend']['structure']})", "Wait for:"]
         lines += [f"• {w}" for w in an["watch"][:4]] or ["• nothing clean right now"]
         return "\n".join(lines)
-    icon = "🟢" if s["side"] == "BUY" else "🔴"
-    lines = [
-        f"{icon} {s['side']} {an['symbol']} - {s['strategy']} | Grade {s['grade']} ({s['score']}/{s['of']})",
-        head,
-        f"Entry ({s['status'] if s['status'].startswith(s['entry_type']) else s['entry_type'] + ', ' + s['status']}): {s['entry']:.{d}f}",
-        f"SL: {s['sl']:.{d}f}  ({s['risk_pips']} pips)",
-        f"TP1 (1R): {s['tp1']:.{d}f}   TP2: {s['tp2']:.{d}f}  (RR {s['rr']:.1f})",
-        f"Confirmations {s['score']}/{s['of']}: " + ", ".join(["✓ " + x for x in s["checks"]["passed"]] + ["✗ " + x for x in s["checks"]["missing"]]),
-        "Why:",
-        *[f"• {r}" for r in s["reasons"]],
-    ]
-    near = [L for L in an["levels"] if abs(L["dist_pips"]) <= 80][:5]
-    if near:
-        lines.append("Levels: " + " | ".join(f"{L['name']} {L['price']:.{d}f} ({L['dist_pips']:+.0f}p)" for L in near))
-    zs = sorted(an["zones"]["fvgs"] + an["zones"]["obs"], key=lambda z: z["dist"])[:3]
-    if zs:
-        lines.append("Zones: " + " | ".join(f"{'bull' if z['side'] == 1 else 'bear'} {z['kind']} {z['bottom']:.{d}f}-{z['top']:.{d}f}" for z in zs))
-    if an["patterns"]:
-        lines.append("Patterns: " + ", ".join(f"{p['name']} [{p['status']}]" for p in an["patterns"][:4]))
-    lines += [s["manage"], s["cancel"], "Not financial advice - use proper risk (1% max)."]
-    return "\n".join(lines)
+    from .alerts import from_analysis
+    return from_analysis(an)
+
